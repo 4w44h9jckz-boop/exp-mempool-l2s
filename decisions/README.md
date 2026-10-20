@@ -62,3 +62,4 @@ and says so.
 | [0055](0055-the-budget-fill-per-payload-is-a-profile-and-the-order-delivered-is-an-input.md) | The budget fill per payload is a profile, and the order delivered is an input |
 | [0056](0056-a-ticket-is-a-bls12-381-signature-in-g1-over-a-fixed-message-verified-as-commonware-verifies.md) | A ticket is a BLS12-381 signature in G1 over a fixed message, verified as Commonware verifies |
 | [0057](0057-a-ticket-paymaster-is-recognised-by-its-code-and-a-self-issuer-pays-for-junk-proofs-only-once.md) | A ticket paymaster is recognised by its code, and a self-issuer pays for junk proofs only once |
+| [0058](0058-the-surface-reads-a-paymasters-code-from-the-client-and-checks-a-claim-before-asking-about-the-prefix.md) | The surface reads a paymaster's code from the client, and checks a claim before asking about the prefix |

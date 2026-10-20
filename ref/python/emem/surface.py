@@ -18,7 +18,8 @@ from .errors import TxError
 from .framepool.config import FramePoolConfig
 from .keccak import keccak256
 from .model import Head, State
-from .tx import Frame, FrameTx, Signature
+from .claimticket import TicketClaim, TicketFrame, carried
+from .tx import Claim, Frame, FrameTx, Signature
 from .txpool import TxPool
 
 FRAME_TX_TYPE = 0x06
@@ -195,8 +196,10 @@ def _hex(b: bytes) -> str:
     return "0x" + b.hex()
 
 
-def decode(raw: bytes, frame_cfg: FramePoolConfig, cfg: SurfaceConfig) -> FrameTx:
-    """SF-2 and SF-3: the model transaction, or a TxError with the first failure."""
+def decode(raw: bytes, frame_cfg: FramePoolConfig, cfg: SurfaceConfig,
+           codes: dict[str, bytes] | None = None) -> FrameTx:
+    """SF-2 and SF-3: the model transaction, or a TxError with the first failure. `codes` is the code at the
+    head of the accounts the transaction's frames target, as the client answers it (SF-3's `claim`)."""
     if not raw or raw[0] != FRAME_TX_TYPE:
         raise TxError(E.ErrTxTypeNotSupported)
     if len(raw) > cfg.max_tx_size:
@@ -232,9 +235,22 @@ def decode(raw: bytes, frame_cfg: FramePoolConfig, cfg: SurfaceConfig) -> FrameT
                                     length=len(s["signature"]) if scheme == "arbitrary" else 0))
         data += [s["signer"], s["msg"], s["signature"]]
     data.append(_rlp_list([_rlp_int(k) for k in keys]) + _rlp_int(t["nonce_seq"]))
+    claim = _claim(t, keys, frame_cfg, codes or {}) if frame_cfg.claims else None
     return FrameTx(sender=_hex(t["sender"]), frames=tuple(frames), nonce_keys=tuple(keys),
                    nonce_seq=t["nonce_seq"], signatures=tuple(signatures), max_fee=t["max_fee"], tip=t["tip"],
-                   size=len(raw), label=tx_hash(raw), zero_bytes=sum(d.count(0) for d in data))
+                   size=len(raw), label=tx_hash(raw), zero_bytes=sum(d.count(0) for d in data), claim=claim)
+
+
+def _claim(t: dict, keys: list[int], frame_cfg: FramePoolConfig, codes: dict[str, bytes]) -> Claim | None:
+    """SF-3's `claim`: CG-10's, from the code of each frame's target."""
+    by_target = {bytes.fromhex(a[2:]): code for a, code in codes.items()}
+    frames = [TicketFrame(f["mode"], f["target"] or t["sender"], f["data"]) for f in t["frames"]]
+    found = carried(TicketClaim(t["chain_id"], 0, t["sender"], t["nonce_seq"], tuple(keys), b""), frames, by_target)
+    if found is None:
+        return None
+    (epoch, salt, _), ok = found
+    return Claim(sender=_hex(t["sender"]), nonce_seq=t["nonce_seq"], epoch=epoch or 0, nonce_keys=tuple(keys),
+                 valid=ok, salt="" if salt is None else _hex(salt))
 
 
 def _roots(data: bytes) -> tuple[tuple[str, int, str], ...]:
@@ -279,8 +295,9 @@ def verdict(answer: dict) -> str:
 class Surface:
     """A node's surface: its pool, its peers, and what it asked, relayed and handed on."""
 
-    def __init__(self, pool: TxPool, cfg: SurfaceConfig, peers: list[str] = ()):
+    def __init__(self, pool: TxPool, cfg: SurfaceConfig, peers: list[str] = (), codes: dict[str, bytes] | None = None):
         self.pool, self.cfg, self.peers = pool, cfg, list(peers)
+        self.codes = codes or {}  # SF-3's `claim`: the client's code at the head, by address
         self.known: dict[str, set[str]] = {}  # SF-6: by hash, the peers known to have it
         self.by_hash: dict[str, FrameTx] = {}  # chain hash to model transaction, for what the pool may hold
         self.handed: list[str] = []  # SF-9: the hashes handed to the client, in order
@@ -288,7 +305,7 @@ class Surface:
     def _admit(self, raw: bytes, answer: dict | None, now: float) -> tuple[str, str | None, bool]:
         """SF-2, FP-2 to FP-7, SF-4 and `add`: the result, the hash if the bytes decode, whether the client was asked."""
         try:
-            tx = decode(raw, self.pool.frame.config, self.cfg)
+            tx = decode(raw, self.pool.frame.config, self.cfg, self.codes)
         except TxError as err:
             return err.code, None, False
         h = tx.label  # the model's hash covers the label, so FP-2 refuses the same bytes twice

@@ -365,7 +365,9 @@ says is checked against the primary source before it is relied on.
   `COLD_SLOAD_COST` 2100, `COLD_ACCOUNT_ACCESS_COST` 2600, and
   `SSTORE_RESET_GAS` reduced to `5000 - COLD_SLOAD_COST`; EIP-2200:
   `SSTORE_SET_GAS` 20000; EIP-3529: a refund of 4,800 for clearing a slot.
-  Used for MA-14, decision record 0026 and experiment 17's flips. EIP-7702
+  Used for MA-14, decision record 0026 and experiment 17's flips, and, both
+  read again at `258836f9` on 2026-10-20, for SF-3's `claim` and decision
+  record 0058. EIP-7702
   read again, at `258836f9`, on 2026-10-09 for experiment 22: Behavior (the
   list is processed "after the sender's nonce is incremented", steps 5, 6, 8
   and 9, and "If any step above fails, immediately stop processing the tuple
@@ -673,7 +675,13 @@ says is checked against the primary source before it is relied on.
   `0x273795f6eb2730d50c3544cbef1e0c1adba4f541` (1,393 bytes) and of the first
   run's paymaster `0xaac74de2ec4dd90656b7f029610dc9fe2f19ceb4` (1,394 bytes,
   another runtime), 2026-10-20. Used for CG-10, its vectors and decision
-  record 0057.
+  record 0057. The record's mined spend, its three refusals and its two
+  spends sent at once are also the claim cases of `sf-03-model-transaction.json`
+  and `sf-05-send-raw.json`, at the head the spend was built on: block
+  `0x75728` (`eth_getBlockByNumber`: timestamp 1792484503, base fee 7, slot
+  510342) and the paymaster's balance there (`eth_getBalance`,
+  4016411986114884 wei), read 2026-10-20. Used for SF-3 and SF-4 version 3
+  and decision record 0058.
 
 Before this repository was published on 2026-10-20, some readings and
 measurements it uses came from research notes and benchmarks that are not

@@ -385,7 +385,9 @@ def _model_json(tx: FrameTx) -> dict:
                         "state_gas": f.state_gas, "value": f.value, "data_size": f.data_size,
                         "deadline": f.deadline, "roots": [list(r) for r in f.roots]} for f in tx.frames],
             "signatures": [{"scheme": s.scheme, "signer": s.signer, "canonical_msg": s.canonical_msg,
-                            "valid": s.valid, "length": s.length} for s in tx.signatures]}
+                            "valid": s.valid, "length": s.length} for s in tx.signatures],
+            "claim": None if tx.claim is None else {"epoch": tx.claim.epoch, "salt": tx.claim.salt,
+                                                    "valid": tx.claim.valid}}
 
 
 def run_surface(case: dict) -> None:
@@ -399,8 +401,10 @@ def run_surface(case: dict) -> None:
     state = merge_state(None, case.get("state", {}))
     focil_cfg = FOCIL_PROFILES[case.get("focil", "off")].with_(**config.get("focil", {}))
     pool = TxPool(Head(**head_d), state, GETH, frame_cfg)
-    node = Surface(pool, surface_cfg, case.get("peers", []))
-    named = {label: decode(bytes.fromhex(raw[2:]), frame_cfg, surface_cfg) for label, raw in case.get("txs", {}).items()}
+    codes = {a.lower(): bytes.fromhex(c[2:]) for a, c in case.get("codes", {}).items()}  # SF-3's `claim`
+    node = Surface(pool, surface_cfg, case.get("peers", []), codes)
+    named = {label: decode(bytes.fromhex(raw[2:]), frame_cfg, surface_cfg, codes)
+             for label, raw in case.get("txs", {}).items()}
     alias: dict[str, str] = {}
     names = lambda hashes: [next((a for a, x in alias.items() if x == h), h) for h in hashes]  # noqa: E731
     now = 0
@@ -410,7 +414,7 @@ def run_surface(case: dict) -> None:
         if "decode" in step:
             raw = bytes.fromhex(step["decode"][2:])
             try:
-                tx = decode(raw, frame_cfg, surface_cfg)
+                tx = decode(raw, frame_cfg, surface_cfg, codes)
                 got = {"result": "ok", "hash": tx.label, "tx": _model_json(tx),
                        "gas": {"max_gas": tx.max_gas, "max_cost": tx.max_cost}}
             except TxError as err:

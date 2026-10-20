@@ -68,7 +68,9 @@ in its document, and every clause marked normative has at least one vector.
 A case drives one node's surface (`docs/spec/11-surface.md`) over a pool set
 up as for `pool`, under the frame profile's surface parameters (SF-1). Case
 keys: `profile`, `config` (with a `surface` part for SF-1's parameters),
-`head`, `state` and `peers`, the node's peer names. Addresses are written as
+`head`, `state`, `peers`, the node's peer names, and `codes`, the code the
+execution client answers for an address at the head (SF-3's `claim`), as
+`0x`-prefixed hexadecimal. Addresses are written as
 the surface writes them, `0x` and 40 lowercase hexadecimal digits, and so is
 the profile's `expiry_verifier`. Transactions are their bytes, as
 `0x`-prefixed hexadecimal. For the inclusion-list steps, `focil` names the
