@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+"""Experiment 01: the one-pending-transaction ceiling. Prints results.md on standard output.
+
+A shared sender, a privacy pool that is the sender of every user's spend, under
+FP-12's `one` and `disjoint-keys`, as demand rises; with a relayer that waits
+for each spend's inclusion and with users who submit their own; split across
+several pools; and at shorter slots.
+"""
+
+from __future__ import annotations
+
+import bisect
+import sys
+from collections import Counter
+from dataclasses import replace
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path[:0] = [str(ROOT / "ref" / "python"), str(ROOT / "sim")]
+
+from emem import EIP_8141, Head  # noqa: E402
+from emem_sim import (ChainConfig, NetworkConfig, Scenario, SharedSenderLoad, Simulation,  # noqa: E402
+                      percentile, table)
+
+SEED = 1
+NODES = 20
+HOURS = 4
+GAS_LIMIT = 2_100_000
+ONE = EIP_8141
+DISJOINT = replace(EIP_8141, name="eip-8141, disjoint-keys", per_sender="disjoint-keys")
+
+
+def mean(values):
+    return sum(values) / len(values) if values else None
+
+
+def run(demand: float, profile=ONE, rule: str = "relayer", pools: int = 1, slot: float = 12.0,
+        hours: float = HOURS, wait: float = 0.0) -> dict:
+    """One run: `demand` spends an hour, spread evenly over `pools` shared senders."""
+    senders = [f"pool{i}" for i in range(pools)]
+    scenario = Scenario(
+        seed=SEED,
+        nodes=NODES,
+        network=NetworkConfig(degree=8, latency=(0.02, 0.10), arrive_timeout=0.5),
+        chain=ChainConfig(slot_time=slot, proposer="rotate", block_delay=(0.1, 1.0)),
+        frame_pool=profile,
+        genesis=Head(timestamp=0, gas_limit=GAS_LIMIT, gas_used=GAS_LIMIT // 2, base_fee=1_000_000_000),
+        accounts={s: 10**24 for s in senders},
+        code={s: "privacy-pool" for s in senders},
+    )
+    sim = Simulation(scenario)
+    load = SharedSenderLoad("spend", rate=demand / 3600, senders=senders, rule=rule,
+                            serial=profile.per_sender == "one", wait=wait)
+    sim.add_load(load)
+
+    held = []  # before each slot: distinct spends pending anywhere, and nodes holding none
+
+    def probe():
+        per_node = [{tx.hash for s in senders for tx in node.pool.frame.content().get(s, [])}
+                    for node in sim.net.nodes.values()]
+        held.append((len(set().union(*per_node)), sum(not h for h in per_node) / NODES))
+
+    sim.sched.every(slot, probe, start=slot - 0.001)
+    duration = hours * 3600
+    rec = sim.run(duration)
+
+    included = {}
+    for sp in load.spends:
+        if sp.tx is not None and rec.txs[sp.tx.hash].included_at is not None:
+            included[sp.label] = rec.txs[sp.tx.hash].included_at
+    delays = [included[sp.label] - sp.requested_at for sp in load.spends if sp.label in included]
+    exposure = [included[sp.label] - rec.txs[sp.tx.hash].submitted_at for sp in load.spends if sp.label in included]
+
+    carrying = Counter(included.values())
+    times = [b["at"] for b in rec.blocks]
+    waiting = [0] * (len(times) + 1)  # spends waiting since before the previous slot, by block, as differences
+    for sp in load.spends:
+        first = bisect.bisect_right(times, sp.requested_at + slot)
+        last = bisect.bisect_left(times, included.get(sp.label, duration + 1))
+        if first < last:
+            waiting[first] += 1
+            waiting[last] -= 1
+    missed, open_ = 0, 0
+    for i, t in enumerate(times):
+        open_ += waiting[i]
+        missed += open_ > 0 and not carrying[t]
+    answers = Counter(a for sp in load.spends for a in sp.answers)
+    return {
+        "load": load, "rec": rec, "sim": sim, "hours": hours, "blocks": len(rec.blocks),
+        "asked": len(load.spends), "landed": len(included), "per_hour": len(included) / hours,
+        "slots_with": sum(1 for b in rec.blocks if carrying[b["at"]]) / len(rec.blocks),
+        "missed": missed, "delays": delays, "exposure": exposure, "waiting": len(load.spends) - len(included),
+        "answers": answers, "submissions": sum(answers.values()) / max(1, len(load.spends)),
+        "busy": answers["ErrFrameSenderBusy"] / max(1, len(load.spends)),
+        "busy_nodes": sum(rec.txs[sp.tx.hash].results["ErrFrameSenderBusy"] for sp in load.spends if sp.tx is not None)
+        / max(1, len(included)),
+        "held": mean([h for h, _ in held]), "held_max": max(h for h, _ in held),
+        "empty": mean([e for _, e in held]),
+        "resims": sum(n.pool.frame.resimulations for n in sim.net.nodes.values()) / NODES / len(rec.blocks),
+    }
+
+
+def formula(rho: float, slot: float, per_sender: str):
+    """Mean delay in a slotted queue serving one spend a slot (`one`) or every spend (`disjoint-keys`)."""
+    if per_sender == "disjoint-keys":
+        return slot / 2
+    return slot / 2 / (1 - rho) if rho < 1 else None
+
+
+def main() -> None:
+    out = ["# 01. The one-pending-transaction ceiling: results", "",
+           f"Generated by `experiments/01-one-pending-ceiling/run.py`, seed {SEED}, {NODES} nodes, "
+           f"{HOURS} simulated hours a run unless a section says otherwise. Do not edit by hand.", ""]
+
+    probe = run(60, hours=0.05)
+    tx = probe["load"].spends[0].tx
+    out += ["## The spend", "",
+            "Every spend is the same frame transaction apart from its nonce key, its tip and its fee cap.", ""]
+    out.append(table(["frames", "data bytes", "intrinsic gas", "max gas", "prefix gas",
+                      "spends per block at the limit"],
+                     [[len(tx.frames), tx.data_bytes, tx.gas.intrinsic, tx.max_gas,
+                       sum(f.exec_gas for f in tx.frames[:1]) + sum(s.verify_gas for s in tx.signatures),
+                       GAS_LIMIT // tx.max_gas]]))
+
+    out += ["", "## 1. Spends an hour against demand", "",
+            "One shared sender, its spends sent by a relayer: under `one` it waits for each spend's inclusion "
+            "before sending the next, under `disjoint-keys` it sends each at once. Demand and landed spends are "
+            "per hour; $\\rho$ is demand over the one-a-slot ceiling. Delays are seconds from the user's request "
+            "to the block that included the spend; the formula is the mean of a slotted queue that serves one "
+            "spend a slot (`one`, $\\frac{s/2}{1-\\rho}$) or all of them (`disjoint-keys`, $s/2$). A slot is "
+            "missed when no spend was included though one had been waiting since before the previous slot. "
+            "Busy answers are every node's `ErrFrameSenderBusy` to a spend, received from the relayer or a peer, "
+            "per spend landed. Re-simulations are FP-15's, per node per block.", ""]
+    rows = []
+    for profile in (ONE, DISJOINT):
+        for demand in (60, 150, 240, 270, 300, 600, 1200):
+            rho = demand * 12 / 3600
+            r = run(demand, profile)
+            rows.append([profile.per_sender, demand, rho, r["asked"], r["per_hour"], r["slots_with"], r["missed"],
+                         mean(r["delays"]), formula(rho, 12, profile.per_sender), percentile(r["delays"], 50),
+                         percentile(r["delays"], 90), percentile(r["delays"], 99), r["waiting"], r["busy_nodes"],
+                         r["resims"]])
+    out.append(table(["per sender", "demand", "rho", "asked", "landed", "slots with a spend", "slots missed",
+                      "delay mean", "formula", "p50", "p90", "p99", "waiting at end", "busy answers",
+                      "re-simulations"], rows))
+
+    out += ["", "## 2. Who submits", "",
+            "One shared sender under `one`. `relayer` is section 1's; `direct` users submit their own spend to a "
+            "random node and, after every block that node imports without including it, submit it again to a "
+            "random node. The `disjoint-keys` relayer is the reference. Exposure is seconds from the spend's "
+            "first submission to any node until its inclusion, the window in which its nullifier is public. "
+            "Submissions, and the `ErrFrameSenderBusy` answers to them, are per spend asked, from the node each "
+            "submission went to. Spends held is the number of distinct spends pending at any node just before a "
+            "slot, and the last column the share of nodes holding none then.", ""]
+    rows = []
+    for demand in (150, 240, 300):
+        for profile, rule in ((ONE, "relayer"), (ONE, "direct"), (DISJOINT, "relayer")):
+            r = run(demand, profile, rule)
+            rows.append([f"{profile.per_sender}, {rule}", demand, r["per_hour"], percentile(r["delays"], 50),
+                         percentile(r["delays"], 90), percentile(r["delays"], 99), percentile(r["exposure"], 50),
+                         percentile(r["exposure"], 90), r["submissions"], r["busy"], r["held"], r["held_max"],
+                         r["empty"]])
+    out.append(table(["rule", "demand", "landed", "delay p50", "p90", "p99", "exposure p50", "p90", "submissions",
+                      "refused busy", "spends held, mean", "max", "nodes with none"], rows))
+
+    out += ["", "## 3. Several shared senders", "",
+            "Demand spread evenly over $m$ shared senders, each with its own relayer at its own node, under `one`. "
+            "The ceiling is one spend per sender per slot.", ""]
+    rows = []
+    for demand in (1200,):
+        for pools in (1, 2, 4, 8):
+            r = run(demand, ONE, pools=pools)
+            rows.append([demand, pools, 300 * pools, r["per_hour"], percentile(r["delays"], 50),
+                         percentile(r["delays"], 90), r["waiting"]])
+    out.append(table(["demand", "senders", "ceiling", "landed", "delay p50", "p90", "waiting at end"], rows))
+
+    out += ["", "## 4. Slot time, and when the relayer sends", "",
+            "One shared sender under `one`, relayer, at 3600 spends an hour, which saturates every slot time "
+            "here; two simulated hours a run. The wait is how long the relayer holds the next spend after its "
+            "node imports the block that included the last one: 0 is section 1's relayer, and 1 s is the latest "
+            "any node here imports a block. Columns as in section 1.", ""]
+    rows = []
+    for slot in (12, 6, 4, 2):
+        for wait in (0.0, 1.0):
+            r = run(3600, ONE, slot=slot, hours=2, wait=wait)
+            rows.append([slot, wait, 3600 / slot, r["per_hour"], r["slots_with"], r["missed"], r["busy_nodes"]])
+    out.append(table(["slot seconds", "wait", "ceiling", "landed", "slots with a spend", "slots missed",
+                      "busy answers"], rows))
+    print("\n".join(out))
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,67 @@
+# What `make` runs, on every pull request and on main: `make verify` in one
+# job, and each experiment against its committed results in a job of its own
+# (decision record 0017).
+#
+# Python 3.13 because the experiments' committed results were produced with it;
+# another version may draw different random numbers (experiments/README.md).
+
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Documents are ASCII, cited files exist, vectors match the specification, benchmark tables derive
+        run: make checks
+
+      - name: Reference implementation tests
+        run: make ref
+
+      - name: Conformance vectors
+        run: make vectors
+
+      - name: Simulation tests
+        run: make sim
+
+  list:
+    runs-on: ubuntu-latest
+    outputs:
+      experiments: ${{ steps.list.outputs.experiments }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - id: list
+        name: List the experiments
+        run: |
+          echo "experiments=$(ls -d experiments/*/ | sed 's:/$::' \
+            | while read -r d; do [ -e "$d/run.py" ] && echo "$d"; done \
+            | python3 -c 'import json, sys; print(json.dumps(sys.stdin.read().split()))')" >> "$GITHUB_OUTPUT"
+
+  experiment:
+    needs: list
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: ${{ fromJSON(needs.list.outputs.experiments) }}
+    name: ${{ matrix.dir }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: The experiment reproduces its results
+        run: ./scripts/check-experiments.sh "${{ matrix.dir }}"
