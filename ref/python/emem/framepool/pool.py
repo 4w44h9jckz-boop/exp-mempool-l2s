@@ -246,11 +246,13 @@ class FramePool:
         return self.entries[tx_hash].seq
 
     def before_prefix(self, tx: FrameTx) -> None:
-        """SF-4: FP-2 to FP-7, the checks a node runs before it asks a client about the prefix.
-        Raises the first failure and changes nothing."""
+        """SF-4: FP-2 to FP-7, and CG-2, CG-4 and CG-6 under `claims`, the checks a node runs before it asks a
+        client about the prefix. Raises the first failure and changes nothing."""
         if tx.hash in self.entries:  # FP-2
             raise TxError(E.ErrAlreadyKnown)
         prefix = check_static(tx, self.head, self.config)  # FP-3 to FP-6
+        if self.config.claims:  # CG-2, CG-4, CG-6
+            self._check_claim(tx)
         if expiring(tx, self.config):  # EN-4 in place of FP-7
             check_expiring(tx, prefix, self.state, self.config, self.head.timestamp + self.config.expiry_margin)
         else:

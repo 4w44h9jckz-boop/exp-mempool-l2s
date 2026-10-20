@@ -365,7 +365,9 @@ says is checked against the primary source before it is relied on.
   `COLD_SLOAD_COST` 2100, `COLD_ACCOUNT_ACCESS_COST` 2600, and
   `SSTORE_RESET_GAS` reduced to `5000 - COLD_SLOAD_COST`; EIP-2200:
   `SSTORE_SET_GAS` 20000; EIP-3529: a refund of 4,800 for clearing a slot.
-  Used for MA-14, decision record 0026 and experiment 17's flips. EIP-7702
+  Used for MA-14, decision record 0026 and experiment 17's flips, and, both
+  read again at `258836f9` on 2026-10-20, for SF-3's `claim` and decision
+  record 0058. EIP-7702
   read again, at `258836f9`, on 2026-10-09 for experiment 22: Behavior (the
   list is processed "after the sender's nonce is incremented", steps 5, 6, 8
   and 9, and "If any step above fails, immediately stop processing the tuple
@@ -534,6 +536,48 @@ says is checked against the primary source before it is relied on.
   latest state, nonce 12 for a sender whose transaction in the next block
   used 9. Used for `sf-02-decoding.json`, `sf-03-model-transaction.json` and
   decision record 0051.
+- **RFC 9380**, "Hashing to Elliptic Curves", read 2026-10-20 from
+  `https://www.rfc-editor.org/rfc/rfc9380.txt`: sections 5.3.1
+  (`expand_message_xmd`), 6.6.2 and 6.6.3 (simplified SWU, and its use
+  through an isogeny), 8.8.1 (the suite BLS12381G1_XMD:SHA-256_SSWU_RO_),
+  appendix E.2 (the 11-isogeny's constants, copied from the text into
+  `ref/python/emem/bls.py` by a parser, all 53 present) and appendix J.9.1
+  (the five test vectors in `ref/python/tests/test_bls.py`). Used for CG-9.
+- **draft-irtf-cfrg-bls-signature-05**, an Internet-Draft of June 2022,
+  expired as a draft, read 2026-10-20 from
+  `https://www.ietf.org/archive/id/draft-irtf-cfrg-bls-signature-05.txt`:
+  sections 2.5 (KeyValidate), 2.7 (CoreVerify), 4.2.3 (the ciphersuite
+  BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_) and appendix A (the curve,
+  the optimal ate pairing, and the compressed serialization it cites from
+  zkcrypto). Used for CG-9.
+- **Commonware**, commonwarexyz/monorepo at
+  `c18a6b9c47b8e55d0a6f2fdef3fa10a75d6641da` (2026-10-19), read 2026-10-20
+  from a clone: `cryptography/src/bls12381/primitives/ops/mod.rs`
+  (`sign_message`, `verify_message`, `hash_with_namespace`),
+  `cryptography/src/bls12381/primitives/group.rs` (G1 and G2 `Read`, which
+  refuse a bad encoding, a point off the curve, the point at infinity and a
+  point outside the subgroup), `cryptography/src/bls12381/primitives/variant.rs`
+  (`MinSig`, `G1_MESSAGE`) and `utils/src/lib.rs` (`union_unique`). Run the
+  same day, outside this repository, to sign every ticket in
+  `conformance/vectors/claim-gated/`. Used for CG-9 and decision record 0056.
+- **EIP-2537, Precompile for BLS12-381 curve operations**, Final, at
+  `258836f9`, read 2026-10-20: "Fine points and encoding of base elements"
+  (each field element in 64 bytes, its top 16 zero and below the modulus;
+  an element of the extension field as `c0` then `c1`; the point at
+  infinity as zeros), "ABI for pairing check" and "Subgroup checks". Used
+  for CG-9 and CG-10.
+- **EIP-8250**, at `258836f9` and again on master at
+  `0ce679f4654ba4d120c97113626f320475e22fa9` (2026-10-19), read
+  2026-10-20: "Transaction introspection", `TXPARAM(0x0F)` and the
+  definition of `nonce_keys_hash`, the same at both. Used for CG-8. Master
+  also allows `nonce_keys == []`, which FP-3, read at `258836f9`, refuses;
+  not yet carried into `02-frame-pool.md`.
+- **The Hegota testnet's EIP-2537 pairing precompile**, `eth_call` to
+  `0x0f` at `https://rpc1.privacy.ethrex.xyz`, 2026-10-20: the verdict on
+  every well-formed and malformed ticket in `cg-09-ticket-verification.json`
+  and on every well-formed one in `cg-10-ticket-carriage.json`. Used for
+  their expected values.
+
 ## Other repositories and public sources
 
 - **exp-frames** (4w44h9jckz-boop/exp-frames, branches `plan` and `tooling`,
@@ -608,6 +652,36 @@ says is checked against the primary source before it is relied on.
   the chain's hash; `test/encode.test.ts` (ethrex's golden vector);
   `exp-frames/experiments/19-mempool-rules/README.md` (ethrex's refusal texts). Used for
   `docs/spec/11-surface.md` and its vectors.
+- **exp-frames** (branch `claude/nifty-einstein-llp9cd` at `f0749cb`, read
+  2026-10-20): `exp-frames/experiments/36-blind-tickets/`, blind tickets issued by a
+  threshold committee and paid for in a paymaster's `VERIFY` frame on the
+  Hegota testnet: the ticket's message and the 168 bytes its frame carries,
+  the paymaster's 122,006 gas of execution, the one pending transaction a
+  payer other than the canonical paymaster may sponsor, and `record.json`,
+  whose four mined tickets are cases in `cg-08-ticket-message.json`,
+  `cg-09-ticket-verification.json` and `cg-10-ticket-carriage.json`. Its
+  issuers and paymaster are `kohaku-rs` (4w44h9jckz-boop/kohaku-rs, `b6a63b1`),
+  `crates/frame-ticket/`, `TicketPaymaster.yul` and `src/ticket.rs`. Used for
+  CG-8 to CG-10 and decision record 0056.
+- **kohaku-rs** (4w44h9jckz-boop/kohaku-rs, branch
+  `claude/nifty-einstein-llp9cd` at `eea02a3`, read 2026-10-20):
+  `crates/frame-ticket/contracts/TicketPaymaster.hex`, the paymaster's
+  creation code, whose bytes after its 25-byte constructor are the
+  ticket-paymaster template of CG-10, and `TicketPaymaster.yul`, which
+  deploys that runtime followed by the key and a 32-byte denomination;
+  `tests/fixtures/record.json`, experiment 36's re-run under
+  `FRAME_TICKET_V1`, whose four mined tickets verify. The template's code
+  was also read from the testnet: `eth_getCode` of
+  `0x273795f6eb2730d50c3544cbef1e0c1adba4f541` (1,393 bytes) and of the first
+  run's paymaster `0xaac74de2ec4dd90656b7f029610dc9fe2f19ceb4` (1,394 bytes,
+  another runtime), 2026-10-20. Used for CG-10, its vectors and decision
+  record 0057. The record's mined spend, its three refusals and its two
+  spends sent at once are also the claim cases of `sf-03-model-transaction.json`
+  and `sf-05-send-raw.json`, at the head the spend was built on: block
+  `0x75728` (`eth_getBlockByNumber`: timestamp 1792484503, base fee 7, slot
+  510342) and the paymaster's balance there (`eth_getBalance`,
+  4016411986114884 wei), read 2026-10-20. Used for SF-3 and SF-4 version 3
+  and decision record 0058.
 
 Before this repository was published on 2026-10-20, some readings and
 measurements it uses came from research notes and benchmarks that are not

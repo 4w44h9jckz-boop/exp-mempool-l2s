@@ -21,6 +21,8 @@ from emem import (EIP_8141, FOCIL_PROFILES, GETH, PROFILES, SEALED_PROFILES, Acc
                   Claim, Dependency, Frame, FrameTx, Head, SealedTx, Signature, Stark, State, Tx, TxPool, Wrapper,
                   build_block, build_il, floor_data_gas, intrinsic_gas, next_base_fee, omission)
 from emem.dependencies import union  # noqa: E402
+from emem.claimticket import (TicketClaim, TicketFrame, carried as ticket_carried,  # noqa: E402
+                              message as ticket_message, valid as ticket_valid)
 from emem.focil import admitted  # noqa: E402
 from emem.recentroots import source_id, write_root  # noqa: E402
 from emem.sealed import fees  # noqa: E402
@@ -383,7 +385,9 @@ def _model_json(tx: FrameTx) -> dict:
                         "state_gas": f.state_gas, "value": f.value, "data_size": f.data_size,
                         "deadline": f.deadline, "roots": [list(r) for r in f.roots]} for f in tx.frames],
             "signatures": [{"scheme": s.scheme, "signer": s.signer, "canonical_msg": s.canonical_msg,
-                            "valid": s.valid, "length": s.length} for s in tx.signatures]}
+                            "valid": s.valid, "length": s.length} for s in tx.signatures],
+            "claim": None if tx.claim is None else {"epoch": tx.claim.epoch, "salt": tx.claim.salt,
+                                                    "valid": tx.claim.valid}}
 
 
 def run_surface(case: dict) -> None:
@@ -397,8 +401,10 @@ def run_surface(case: dict) -> None:
     state = merge_state(None, case.get("state", {}))
     focil_cfg = FOCIL_PROFILES[case.get("focil", "off")].with_(**config.get("focil", {}))
     pool = TxPool(Head(**head_d), state, GETH, frame_cfg)
-    node = Surface(pool, surface_cfg, case.get("peers", []))
-    named = {label: decode(bytes.fromhex(raw[2:]), frame_cfg, surface_cfg) for label, raw in case.get("txs", {}).items()}
+    codes = {a.lower(): bytes.fromhex(c[2:]) for a, c in case.get("codes", {}).items()}  # SF-3's `claim`
+    node = Surface(pool, surface_cfg, case.get("peers", []), codes)
+    named = {label: decode(bytes.fromhex(raw[2:]), frame_cfg, surface_cfg, codes)
+             for label, raw in case.get("txs", {}).items()}
     alias: dict[str, str] = {}
     names = lambda hashes: [next((a for a, x in alias.items() if x == h), h) for h in hashes]  # noqa: E731
     now = 0
@@ -408,7 +414,7 @@ def run_surface(case: dict) -> None:
         if "decode" in step:
             raw = bytes.fromhex(step["decode"][2:])
             try:
-                tx = decode(raw, frame_cfg, surface_cfg)
+                tx = decode(raw, frame_cfg, surface_cfg, codes)
                 got = {"result": "ok", "hash": tx.label, "tx": _model_json(tx),
                        "gas": {"max_gas": tx.max_gas, "max_cost": tx.max_cost}}
             except TxError as err:
@@ -472,6 +478,35 @@ def run_surface(case: dict) -> None:
             raise Mismatch(f"{where}: unknown step {sorted(step)}")
 
 
+def _ticket_claim(d: dict) -> TicketClaim:
+    return TicketClaim(int(d["chain_id"], 16), int(d.get("epoch", "0x0"), 16), bytes.fromhex(d["sender"][2:]),
+                       int(d["nonce_seq"], 16), tuple(int(k, 16) for k in d["nonce_keys"]),
+                       bytes.fromhex(d.get("salt", "0x")[2:]))
+
+
+def run_claim_ticket(case: dict) -> None:
+    """`docs/spec/10-claim-gated-admission.md`, CG-8 to CG-10: a ticket's message, its verdict, and where it rides."""
+    if "frames" in case:  # CG-10
+        codes = {bytes.fromhex(a[2:]): bytes.fromhex(c[2:]) for a, c in case["codes"].items()}
+        frames = [TicketFrame(f["mode"], bytes.fromhex(f["target"][2:]), bytes.fromhex(f["data"][2:]))
+                  for f in case["frames"]]
+        found = ticket_carried(_ticket_claim(case["tx"]), frames, codes)
+        if found is None:
+            got = {"claim": None}
+        else:
+            (e, salt, issuer), ok = found
+            got = {"claim": {"epoch": None if e is None else hex(e), "salt": None if salt is None else "0x" + salt.hex(),
+                             "issuer": "0x" + issuer.hex()}, "valid": ok}
+        _compare(case["expect"], got, "claim_ticket")
+        return
+    claim = _ticket_claim(case["claim"])
+    m = ticket_message(claim)
+    got = {"message": None if m is None else "0x" + m.hex()}
+    if "issuer" in case:
+        got["valid"] = ticket_valid(claim, bytes.fromhex(case["issuer"][2:]), bytes.fromhex(case["signature"][2:]))
+    _compare(case["expect"], got, "claim_ticket")
+
+
 def run_replay(case: dict) -> None:
     """`docs/spec/12-replay.md`: one fixture under one profile."""
     name = case.get("profile", EIP_8141.name)
@@ -485,7 +520,7 @@ def run_replay(case: dict) -> None:
 
 OPERATIONS = {"next_base_fee": run_next_base_fee, "intrinsic_gas": run_intrinsic_gas,
               "frame_gas": run_frame_gas, "ticket_fee": run_ticket_fee, "pool": run_pool,
-              "surface": run_surface, "replay": run_replay}
+              "surface": run_surface, "replay": run_replay, "claim_ticket": run_claim_ticket}
 
 
 def vector_files(args: list[str]) -> list[Path]:

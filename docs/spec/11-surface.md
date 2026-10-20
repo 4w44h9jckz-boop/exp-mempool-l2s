@@ -1,7 +1,7 @@
 # 11. The surface: real frame transactions in and out of the pool
 
-Version 2, 2026-10-20. Version 1 did not decode a recent-root verifier frame's
-tuples; see the version notes at the end.
+Version 3, 2026-10-20. Version 1 did not decode a recent-root verifier frame's
+tuples; version 2 did not read a claim; see the version notes at the end.
 
 The model has no RLP, no signatures and no EVM (`00-model.md`). This document
 specifies the layer around a frame pool that a node needs to take real
@@ -117,6 +117,7 @@ take their defaults.
 | `zero_bytes` | the zero bytes among every frame's `data`, every signature's `signer`, `msg` and `signature`, and $\mathit{rlp}(\mathit{nonce\_keys}) \Vert \mathit{rlp}(\mathit{nonce\_seq})$, which are FEE-4's $D$ |
 | `label` | the transaction's hash |
 | `verdict` | SF-4 |
+| `claim` | under a frame profile with `claims` (CG-1), CG-10's claim, with the code at the pool's head of each `VERIFY` frame's target as the execution client answers it (`eth_getCode`): its `sender` written as above, `nonce_keys` and `nonce_seq` the transaction's, `epoch` and `salt` (`0x` and 64 lowercase hexadecimal digits) from the ticket's frame, and `valid` by CG-9; a ticket's frame whose data is not 168 bytes gives `epoch` 0, an empty `salt` and `valid` false; absent when no frame carries a ticket, and under any other profile |
 
 The transaction's **hash** is $\mathit{keccak256}$ of the bytes received,
 the hash the chain gives it, and it is the hash FP-2, MD-8's `verdicts` and
@@ -124,6 +125,18 @@ every answer of this document use. Two byte strings that differ anywhere,
 in a signature's bytes for instance, are two transactions, as on chain.
 **Source:** EIP-2718, "the transaction hash is `keccak256(TransactionType ||
 TransactionPayload)`"; EIP-8141, "Field Definitions" and "Gas Accounting".
+
+The `claim` is read with the code the execution client answers at the
+pool's head because MD-2's `code` is compared by equality only, and a node
+that does not execute the EVM has no other reader of a real account's code.
+A node may keep, by address, each target whose code it found to be a ticket
+paymaster's, and read every other target again at each head: outside the
+transaction that created a contract, `SELFDESTRUCT` "does not delete any
+data (including storage keys, code, or the account itself)" (EIP-6780), and
+EIP-7702 sets code only where the code "is empty or already delegated", so
+such code changes only in a reorganisation. A ticket paymaster then costs a
+node one `eth_getCode` and one G2 decoding. *Interpretation*, decision
+record 0058.
 
 *Not modelled*: the cryptographic check of a signature, which reaches the
 pool only through the verdict (SF-4); and a dependency frame's triples
@@ -138,9 +151,13 @@ stands for their check against the contract's entries (RR-6).
 take the outcome of a transaction's validation prefix from an execution
 client that does, simulated against the pool's head, and MUST record it as
 the transaction's `verdict` before `add`. It MUST NOT ask the client about a
-transaction that SF-2 or FP-2 to FP-7 refuse: those checks read no state
-except the sender's nonce sequences, and the EIP asks a node to "perform all
-available structural and stateless checks before sender-state access". The
+transaction that SF-2 or FP-2 to FP-7 refuse, or, under a frame profile with
+`claims`, that CG-2, CG-4 or CG-6 refuse after FP-6: those checks read no
+state except the sender's nonce sequences and the code SF-3's `claim` reads,
+and the EIP asks a node to "perform all available structural and stateless
+checks before sender-state access". Running CG-2, CG-4 and CG-6 before the
+client is this repository's: a junk ticket then costs a node one signature
+check and no simulation (*Interpretation*, decision record 0058). The
 client's answer maps to a verdict as follows, matching an answer of the form
 `Name(...)` by its name:
 
@@ -306,3 +323,11 @@ item 42 asks. A run passes or fails on these steps:
   the header's `slotNumber`, which differs from the block number on the
   testnet. A transaction with no frame to `recent_root_address` decodes as
   under version 1 (decision record 0053).
+- **Version 3.** SF-3's model transaction carries a `claim` under a frame
+  profile with `claims` (`10-claim-gated-admission.md` version 4, CG-10),
+  read with the code the execution client answers for each `VERIFY`
+  frame's target; SF-4 runs CG-2, CG-4 and CG-6 before it asks the client,
+  so a junk ticket is refused at the cost of a signature check. Under every
+  profile without `claims` nothing changes, and every vector of version 2
+  holds and now says version 3. *Interpretation*, decision records 0057
+  and 0058.
