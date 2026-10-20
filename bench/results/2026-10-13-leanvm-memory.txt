@@ -1,0 +1,227 @@
+# leanVM aggregate memory
+date: 2026-10-13T14:22:37Z
+leanvm commit: 1f9e4c4f478038a95a2619009cb9cf654ae0824e
+commit: fcee2b7c96c383b121f78b396674592fbc66a8bd
+harness sha256: 17838e77119e31fd02bf3986b84652304ada1c53f7fa9b1810f58c0f4a7ccf4e
+cpu: Intel(R) Xeon(R) Processor @ 2.10GHz
+cores: 4
+memory: 16874930176 bytes
+memory limit of this process group: 14343688192 bytes
+rustc: rustc 1.97.0 (2d8144b78 2026-07-07)
+log_inv_rate: 1
+
+subject: recursive n=1 per_leaf=1
+  kind: recursive
+  n: 1
+  per leaf: 1
+  held kib: 397864
+  prove ms: 738.305
+  cycles: 450560
+  peak kib: 1353624
+  proof bytes: 272288
+  verified: yes
+
+subject: recursive n=2 per_leaf=1
+  kind: recursive
+  n: 2
+  per leaf: 1
+  held kib: 394624
+  prove ms: 1481.819
+  cycles: 901120
+  peak kib: 2575540
+  proof bytes: 286456
+  verified: yes
+
+subject: recursive n=3 per_leaf=1
+  kind: recursive
+  n: 3
+  per leaf: 1
+  held kib: 394172
+  prove ms: 2279.368
+  cycles: 1277952
+  peak kib: 3972376
+  proof bytes: 285464
+  verified: yes
+
+subject: recursive n=4 per_leaf=1
+  kind: recursive
+  n: 4
+  per leaf: 1
+  held kib: 403548
+  prove ms: 2934.646
+  cycles: 1802240
+  peak kib: 4900920
+  proof bytes: 297688
+  verified: yes
+
+subject: recursive n=5 per_leaf=1
+  kind: recursive
+  n: 5
+  per leaf: 1
+  held kib: 406080
+  prove ms: 3852.538
+  cycles: 2555904
+  peak kib: 6637364
+  proof bytes: 331376
+  verified: yes
+
+subject: recursive n=6 per_leaf=1
+  kind: recursive
+  n: 6
+  per leaf: 1
+  held kib: 411624
+  prove ms: 4784.206
+  cycles: 2555904
+  peak kib: 7622564
+  proof bytes: 297288
+  verified: yes
+
+subject: recursive n=7 per_leaf=1
+  kind: recursive
+  n: 7
+  per leaf: 1
+  held kib: 407036
+  prove ms: 4476.661
+  cycles: 2555904
+  peak kib: 7573872
+  proof bytes: 299208
+  verified: yes
+
+subject: recursive n=8 per_leaf=1
+  kind: recursive
+  n: 8
+  per leaf: 1
+  held kib: 418108
+  prove ms: 5512.614
+  cycles: 3604480
+  peak kib: 9307660
+  proof bytes: 312008
+  verified: yes
+
+subject: recursive n=9 per_leaf=1
+  kind: recursive
+  n: 9
+  per leaf: 1
+  held kib: 407160
+  prove ms: 7500.364
+  cycles: 5111808
+  peak kib: 13027676
+  proof bytes: 344112
+  verified: yes
+
+subject: recursive n=10 per_leaf=1
+  kind: recursive
+  n: 10
+  per leaf: 1
+  held kib: 395592
+  prove ms: 8087.221
+  cycles: 5111808
+  peak kib: 13013316
+  proof bytes: 345488
+  verified: yes
+
+subject: recursive n=11 per_leaf=1
+  kind: recursive
+  n: 11
+  per leaf: 1
+  held kib: 405664
+
+subject: recursive n=11 per_leaf=1
+  exit status: 137
+
+subject: recursive n=12 per_leaf=1
+  kind: recursive
+  n: 12
+  per leaf: 1
+  held kib: 397404
+
+subject: recursive n=12 per_leaf=1
+  exit status: 137
+
+subject: recursive n=2 per_leaf=16
+  kind: recursive
+  n: 2
+  per leaf: 16
+  held kib: 1153284
+  prove ms: 1736.471
+  cycles: 1212416
+  peak kib: 3911180
+  proof bytes: 317712
+  verified: yes
+
+subject: recursive n=4 per_leaf=16
+  kind: recursive
+  n: 4
+  per leaf: 16
+  held kib: 1157372
+  prove ms: 3761.169
+  cycles: 2424832
+  peak kib: 6648248
+  proof bytes: 332944
+  verified: yes
+
+subject: recursive n=8 per_leaf=16
+  kind: recursive
+  n: 8
+  per leaf: 16
+  held kib: 1167136
+  prove ms: 7118.679
+  cycles: 4849664
+  peak kib: 12933348
+  proof bytes: 350120
+  verified: yes
+
+subject: sphincs n=1 per_leaf=0
+  kind: sphincs
+  n: 1
+  per leaf: 0
+  held kib: 170816
+  prove ms: 161.001
+  cycles: 146432
+  peak kib: 410356
+  proof bytes: 224632
+  verified: yes
+
+subject: sphincs n=16 per_leaf=0
+  kind: sphincs
+  n: 16
+  per leaf: 0
+  held kib: 170916
+  prove ms: 590.631
+  cycles: 221184
+  peak kib: 1166732
+  proof bytes: 255512
+  verified: yes
+
+subject: sphincs n=64 per_leaf=0
+  kind: sphincs
+  n: 64
+  per leaf: 0
+  held kib: 178488
+  prove ms: 2065.447
+  cycles: 753664
+  peak kib: 3386484
+  proof bytes: 323064
+  verified: yes
+
+subject: sphincs n=128 per_leaf=0
+  kind: sphincs
+  n: 128
+  per leaf: 0
+  held kib: 177412
+  prove ms: 3587.772
+  cycles: 1507328
+  peak kib: 6658592
+  proof bytes: 340600
+  verified: yes
+
+subject: sphincs n=245 per_leaf=0
+  kind: sphincs
+  n: 245
+  per leaf: 0
+  held kib: 169768
+  prove ms: 4653.731
+  cycles: 2359296
+  peak kib: 9899944
+  proof bytes: 321776
+  verified: yes
