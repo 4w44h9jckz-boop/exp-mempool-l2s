@@ -189,9 +189,13 @@ they added; their experiments are not part of this repository.
     3 on `base` gives the ticket its bytes, its check and its frame, CG-8 to
     CG-10, in the format a wallet ran on the Hegota testnet (decision record
     0056); skandha plays all 61 ticket vectors on `@noble/curves`, and
-    claim-gated admission with received wrappers. Left: which ticket
-    paymasters a node accepts, and a node that takes a ticket from a real
-    transaction.
+    claim-gated admission with received wrappers. *Done on `base`,
+    2026-10-20:* version 4 accepts as a ticket paymaster any account whose
+    code is the template, a key and a denomination (decision record 0057),
+    and `11-surface.md` version 3 reads the claim from a real transaction
+    and checks it before the client is asked (decision record 0058); a
+    skandha node does both against the testnet with no configuration.
+    Finished when `base` reaches `main`.
 
 ### Not started
 
