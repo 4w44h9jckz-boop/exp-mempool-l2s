@@ -100,6 +100,24 @@ ErrClaimUsed = "ErrClaimUsed"
 ErrClaimExpired = "ErrClaimExpired"
 ErrRelayAggregate = "ErrRelayAggregate"
 
+# This repository's, for ERC-8421's standard ruleset (`docs/spec/14-erc-8421.md`)
+ErrFramePreVerifyNoCode = "ErrFramePreVerifyNoCode"
+ErrFrameStrayDefault = "ErrFrameStrayDefault"
+ErrEntityVerifyGas = "ErrEntityVerifyGas"
+ErrFrameUnassignedOpcode = "ErrFrameUnassignedOpcode"
+ErrFrameOutOfGasRevert = "ErrFrameOutOfGasRevert"
+ErrFrameCreation = "ErrFrameCreation"
+ErrFrameStorageAccess = "ErrFrameStorageAccess"
+ErrNonceGap = "ErrNonceGap"
+ErrNonceKeyLimit = "ErrNonceKeyLimit"
+ErrSenderLimit = "ErrSenderLimit"
+ErrEntityIsSender = "ErrEntityIsSender"
+ErrLocalStorage = "ErrLocalStorage"
+ErrEntityBanned = "ErrEntityBanned"
+ErrEntityThrottled = "ErrEntityThrottled"
+ErrSenderThrottled = "ErrSenderThrottled"
+ErrPayerOpsAllowed = "ErrPayerOpsAllowed"
+
 
 class TxError(Exception):
     """A rejection. The pools raise it internally and return its code from `add`."""

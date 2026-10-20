@@ -214,8 +214,8 @@ class Frame:
     approves: int | None = None
     reverts: bool = False
     opcodes: frozenset[str] = frozenset()
-    reads: tuple[tuple[str, int, int | None], ...] = ()
-    writes: tuple[tuple[str, int, int], ...] = ()
+    reads: tuple[tuple, ...] = ()  # (address, slot, expected[, associated]), MD-6
+    writes: tuple[tuple, ...] = ()  # (address, slot, value[, associated]), MD-6
     calls: tuple[str, ...] = ()
     installs_code: str | None = None
     deadline: int | None = None

@@ -1,13 +1,14 @@
 # 00. The model: accounts, heads, transactions, the pool interface, fees
 
-Version 9, 2026-10-20. Version 1 left the EIP-8250 nonce fields out of
+Version 10, 2026-10-20. Version 1 left the EIP-8250 nonce fields out of
 FEE-4 and had no `finalize` operation, version 2 had no dependency frames,
 version 3 had no sealed transactions, version 4 gave an authorization no
 nonce of its own, version 5 gave a frame transaction no admission claim,
 version 6 did not say how much of a transaction's gas is state gas, and
 version 7 had no transaction that takes value from accounts that signed for
-it, and version 8 priced every calldata byte as non-zero and had no client
-verdict; see the version notes at the end.
+it, version 8 priced every calldata byte as non-zero and had no client
+verdict, and version 9 had no stake and no storage association; see the
+version notes at the end.
 
 Every other document in this directory talks about the objects defined here.
 The model keeps exactly the fields a transaction pool reads and drops the rest:
@@ -34,6 +35,9 @@ such as `alice`.
 | `storage` | map integer to integer | empty | storage slots; an absent slot reads 0 |
 | `nonce_seqs` | map integer to integer | empty | EIP-8250 keyed nonce sequences for keys other than 0; an absent key reads 0 |
 | `withdrawal` | integer $\geq 0$ | 0 | the pending delayed withdrawal of a canonical paymaster instance (EIP-8141, Paymasters) |
+| `stake` | integer $\geq 0$ | 0 | the stake ERC-8421's Staking Registry reports for the account, in wei (`14-erc-8421.md`, AM-3) |
+| `unstake_delay` | integer $\geq 0$ | 0 | the unstake delay it reports, in seconds |
+| `withdrawing` | boolean | false | whether the account has begun to withdraw its stake |
 
 A `code` value that starts with `0xef0100` is an EIP-7702 delegation indicator
 and the rest of the string is the delegate. Any other non-empty value is
@@ -123,9 +127,9 @@ compared by equality (AG-2); and, because the model does not execute code,
 | --- | --- |
 | `approves` | the scope the frame's code calls `APPROVE` with, or absent if it never does |
 | `reverts` | the frame reverts |
-| `opcodes` | the set of opcode names from the banned list of `02-frame-pool.md` the frame executes |
-| `reads` | storage slots read, as (address, slot, expected); the frame's code approves only if each slot with an `expected` value holds it |
-| `writes` | state writes, as (address, slot, value) |
+| `opcodes` | the set of opcode names from the banned list of `02-frame-pool.md` the frame executes, and `UNASSIGNED` if it executes an unassigned opcode and `OOG_REVERT` if it reverts by running out of gas (`14-erc-8421.md`, AM-8) |
+| `reads` | storage slots read, as (address, slot, expected); the frame's code approves only if each slot with an `expected` value holds it; a fourth element, when present, is the address a tracer finds the slot associated with (`14-erc-8421.md`, AM-9) |
+| `writes` | state writes, as (address, slot, value), with the same optional fourth element |
 | `calls` | addresses reached through `CALL*` or `EXTCODE*` |
 | `installs_code` | for a deploy frame: the code it installs at `sender`, or absent |
 | `deadline` | for an expiry verifier frame: the deadline its calldata encodes |
@@ -350,3 +354,11 @@ transaction that pays it says so in its frame's `state_gas` and its
   gas, and a `reset` with no verdicts is version 8's. Every vector of this
   document was re-read against version 9 and needed no change but its
   version.
+
+- **Version 10.** MD-2's account gains `stake`, `unstake_delay` and
+  `withdrawing`, what ERC-8421's Staking Registry reports for it; MD-6's
+  reads and writes gain the address a slot is associated with, and a
+  frame's observed opcodes may include `UNASSIGNED` and `OOG_REVERT`. Only
+  `14-erc-8421.md` reads them (decision record 0061). With every new field
+  at its default, a state and a transaction are version 9's, and every
+  vector of this document holds and now says version 10.

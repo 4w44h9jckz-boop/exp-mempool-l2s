@@ -150,7 +150,7 @@ class FramePool:
             try:
                 sim = self._simulate(e.tx, e.prefix, head, state)
             except TxError as err:
-                self._remove(h, "invalidated:" + err.code)
+                self._invalidated(h, err)
                 continue
             self._index(e, -1)
             e.sim = sim
@@ -175,6 +175,10 @@ class FramePool:
                 self._remove(h, "payer:" + err.code, account=False)
                 continue
             self._account(e, +1)
+
+    def _invalidated(self, tx_hash: str, err: TxError) -> None:
+        """FP-15 step 3: a re-run that fails removes the transaction."""
+        self._remove(tx_hash, "invalidated:" + err.code)
 
     def _reuse(self, e: Entry, changed: list[tuple], state: State) -> bool:
         """FP-15 step 3 under `reuse_balance`, or MA-9 step 1: whether a change to balances alone re-runs nothing."""

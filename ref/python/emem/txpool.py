@@ -5,6 +5,7 @@ from __future__ import annotations
 import itertools
 
 from .framepool.config import EIP_8141, FramePoolConfig
+from .framepool.erc8421 import StandardPool
 from .framepool.pool import FramePool
 from .model import Head, State
 from .noncepool.config import GETH, NoncePoolConfig
@@ -24,7 +25,8 @@ class TxPool:
         self.reserver = Reserver()
         sequence = itertools.count().__next__  # one arrival order across the subpools
         self.nonce = NoncePool(head, state, nonce_config, self.reserver, now, sequence)
-        self.frame = FramePool(head, state, frame_config, self.reserver, now, sequence)
+        pool = StandardPool if frame_config.ruleset == "erc-8421" else FramePool  # 14-erc-8421.md
+        self.frame = pool(head, state, frame_config, self.reserver, now, sequence)
         self.sealed = SealedPool(head, state, sealed_config, self.reserver, now, sequence)
 
     def add(self, txs: list[AnyTx], now: float = 0) -> list[str]:

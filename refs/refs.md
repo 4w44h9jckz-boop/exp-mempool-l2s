@@ -428,7 +428,20 @@ says is checked against the primary source before it is relied on.
   sender under keyed nonces. Read and reported on in the session; no clause
   rests on it yet. Named in decision record 0035 as the reason a bundler is
   the host for a second implementation, and as the profile that comes here
-  first.
+  first. Read again on 2026-10-20 at the same head, `493ba8ac`, whole, for
+  `13-descriptors.md` (Alternative Mempools: "the IPFS hash of a document
+  that describes its rules") and `14-erc-8421.md`, every rule of its
+  Specification; decision records 0060 and 0061.
+- **RFC 8785, JSON Canonicalization Scheme (JCS)**, read 2026-10-20:
+  section 3.2.2.3 (numbers serialized as ECMAScript does) and 3.2.3
+  (members sorted by UTF-16 code units). Used for DS-2, decision record
+  0060.
+- **multiformats** `cid` at `9eca1c5b`, `multicodec` at `8d9e9b3b` and
+  `multibase` at `d7406cde`, read 2026-10-20: the CIDv1 grammar
+  `<multibase-prefix><multicodec-cidv1><multicodec-content-type><multihash-content-address>`;
+  `cidv1` `0x01`, `raw` `0x55`, `sha2-256` `0x12`; multibase `b`, "base32",
+  "RFC4648 case-insensitive - no padding". Used for DS-3, decision record
+  0060.
 - **skandha**, etherspot/skandha at `acba0d8`, read 2026-10-13: an ERC-4337
   bundler in TypeScript (Bun and Lerna, vitest). The owner's fork,
   4w44h9jckz-boop/skandha, holds this repository's second implementation in

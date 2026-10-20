@@ -80,6 +80,23 @@ class FramePoolConfig:
     claim_memory: str = "slot"  # CG-4: "slot" (R3), "claim" (its variant) or "none"
     signed_proofs: bool = False  # CG-3: whether a sender's signature covers its wrapper's proofs
     verifies: bool = True  # CG-7: false makes the node a relay, which verifies no proof
+    # 14-erc-8421.md, AM-1, read only when ruleset is "erc-8421"; a descriptor sets them (13-descriptors.md, DS-6)
+    ruleset: str = "eip-8141"
+    max_verify_gas_per_entity: int = 100_000
+    max_verify_gas_staked_entity: int = 1_000_000
+    min_stake_value: int = 10**18
+    min_unstake_delay: int = 86400
+    min_inclusion_rate_denominator: int = 10
+    throttling_slack: int = 10
+    ban_slack: int = 50
+    refresh_seconds: int = 3600
+    throttled_entity_mempool_count: int = 4
+    throttled_entity_live_blocks: int = 10  # not modelled
+    throttled_entity_block_count: int = 4  # not modelled
+    same_unstaked_entity_mempool_count: int = 10
+    max_txs_allowed_unstaked_entity: int = 10000
+    same_nonce_key_mempool_count: int = 4
+    same_sender_mempool_count: int = 64
 
     def with_(self, **changes) -> FramePoolConfig:
         return replace(self, **changes)

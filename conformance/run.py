@@ -10,8 +10,10 @@ script reads vectors and never writes them: there is no regeneration mode.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -21,6 +23,7 @@ from emem import (EIP_8141, FOCIL_PROFILES, GETH, PROFILES, SEALED_PROFILES, Acc
                   Claim, Dependency, Frame, FrameTx, Head, SealedTx, Signature, Stark, State, Tx, TxPool, Wrapper,
                   build_block, build_il, floor_data_gas, intrinsic_gas, next_base_fee, omission)
 from emem.dependencies import union  # noqa: E402
+from emem.descriptor import DescriptorError, Store, canonical, compile_config  # noqa: E402
 from emem.claimticket import (TicketClaim, TicketFrame, carried as ticket_carried,  # noqa: E402
                               message as ticket_message, valid as ticket_valid)
 from emem.focil import admitted  # noqa: E402
@@ -31,7 +34,8 @@ from emem.errors import TxError  # noqa: E402
 from emem.replay import replay  # noqa: E402
 
 DEFAULT_HEAD = {"number": 0, "timestamp": 1000, "gas_limit": 30_000_000, "gas_used": 15_000_000, "base_fee": 10}
-ACCOUNT_FIELDS = ("nonce", "balance", "code", "storage", "nonce_seqs", "withdrawal")
+ACCOUNT_FIELDS = ("nonce", "balance", "code", "storage", "nonce_seqs", "withdrawal", "stake", "unstake_delay",
+                  "withdrawing")
 
 
 class Mismatch(Exception):
@@ -194,9 +198,58 @@ def run_ticket_fee(case: dict) -> None:
         raise Mismatch(f"expected {case['expect']}, got {got}")
 
 
+DESCRIPTORS = ROOT / "docs" / "spec" / "descriptors"
+
+
+def _load(store: Store, item: dict):
+    """A descriptor of a case's `store`, or the one it loads: a file of this repository, or a value."""
+    if "file" in item and set(item) == {"file"}:
+        return store.load((ROOT / item["file"]).read_text())
+    return store.load(json.dumps(item))
+
+
+@lru_cache(maxsize=None)
+def descriptor(name: str):
+    """DS-8: `docs/spec/descriptors/<name>.json`, loaded after the descriptors it inherits from."""
+    store, pending = Store(), sorted(DESCRIPTORS.glob("*.json"))
+    loaded = {}
+    while pending:
+        for path in list(pending):
+            value = json.loads(path.read_text())
+            if value["parent"] is None or value["parent"] in store.held:
+                loaded[path.stem] = store.load(path.read_text())
+                pending.remove(path)
+                break
+        else:
+            raise ValueError(f"no parent held for {[p.name for p in pending]}")
+    return loaded[name]
+
+
+def run_descriptor(case: dict) -> None:
+    """`docs/spec/13-descriptors.md`: load a descriptor after the case's `store`, and what it compiles to."""
+    store = Store()
+    for item in case.get("store", []):
+        _load(store, item)
+    try:
+        if "text" in case:
+            d = store.load(case["text"])
+        elif "descriptor" in case:
+            d = _load(store, case["descriptor"])
+        else:
+            d = _load(store, {"file": case["file"]})
+        config = compile_config(d)
+        got = {"result": "ok", "canonical": canonical(d.value), "id": d.id, "modules": len(d.effective),
+               "set_by": {m: by for m, (_, by) in d.effective.items()}, "profile": config.name,
+               "config": dataclasses.asdict(config)}
+    except DescriptorError as err:
+        got = {"result": err.code, "rule": err.rule}
+    _compare(case["expect"], got, "descriptor")
+
+
 def run_pool(case: dict) -> None:
-    profile = PROFILES[case.get("profile", EIP_8141.name)]
     config = case.get("config", {})
+    loaded = descriptor(case["descriptor"]) if "descriptor" in case else None
+    profile = compile_config(loaded) if loaded else PROFILES[case.get("profile", EIP_8141.name)]
     nonce_cfg = GETH.with_(**config.get("nonce", {}))
     frame_cfg = profile.with_(**config.get("frame", {}))
     sealed_cfg = SEALED_PROFILES[case.get("sealed", "off")].with_(**config.get("sealed", {}))
@@ -207,6 +260,8 @@ def run_pool(case: dict) -> None:
     state = merge_state(None, case.get("state", {}))
     write_roots(state, frame_cfg, case.get("roots"))
     pool = TxPool(head, state, nonce_cfg, frame_cfg, sealed_config=sealed_cfg)
+    for addr, counters in case.get("reputation", {}).items():  # AM-13: what the node was given
+        pool.frame.give(addr, counters["seen"], counters["included"])
     aggregator = Aggregator(pool)
     scheduled = ()  # LU-13: the last block's commitments
     now = 0
@@ -218,6 +273,12 @@ def run_pool(case: dict) -> None:
             got = pool.add(txs, now)
             if "expect" in step and got != step["expect"]:
                 raise Mismatch(f"{where}: add expected {step['expect']}, got {got}")
+            if loaded is not None:  # DS-7: every refusal names a rule of the loaded descriptor
+                rules = [None if code == "ok" else loaded.rule_of(code) for code in got]
+                if any(code != "ok" and rule is None for code, rule in zip(got, rules)):
+                    raise Mismatch(f"{where}: a refusal names no rule of {loaded.id}: {got}")
+                if "expect_rules" in step and rules != step["expect_rules"]:
+                    raise Mismatch(f"{where}: rules expected {step['expect_rules']}, got {rules}")
         elif "wrapper" in step:
             now = step.get("now", now)
             got = aggregator.receive(make_wrapper(step["wrapper"]), now)
@@ -256,6 +317,10 @@ def run_pool(case: dict) -> None:
         elif "tick" in step:
             now = step["tick"]
             pool.tick(now)
+        elif "reputation" in step:  # AM-13
+            got = pool.frame.reputation(step["reputation"])
+            if got != step["expect"]:
+                raise Mismatch(f"{where}: reputation of {step['reputation']} expected {step['expect']}, got {got}")
         elif "finalize" in step:
             now = step.get("now", now)
             pool.finalize([(b["number"], dict(b.get("gas", {}))) for b in step["finalize"]], now)
@@ -520,7 +585,8 @@ def run_replay(case: dict) -> None:
 
 OPERATIONS = {"next_base_fee": run_next_base_fee, "intrinsic_gas": run_intrinsic_gas,
               "frame_gas": run_frame_gas, "ticket_fee": run_ticket_fee, "pool": run_pool,
-              "surface": run_surface, "replay": run_replay, "claim_ticket": run_claim_ticket}
+              "surface": run_surface, "replay": run_replay, "claim_ticket": run_claim_ticket,
+              "descriptor": run_descriptor}
 
 
 def vector_files(args: list[str]) -> list[Path]:
