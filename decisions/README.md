@@ -60,3 +60,4 @@ and says so.
 | [0053](0053-hegota-testnet-models-eip-8272-and-the-surface-reads-its-tuples.md) | `hegota-testnet` models EIP-8272, and the surface reads its tuples |
 | [0054](0054-shared-sender-admission-is-judged-on-the-mined-pair-with-a-stand-in-for-the-refused-spend.md) | Shared-sender admission is judged on the mined pair, with a stand-in for the refused spend |
 | [0055](0055-the-budget-fill-per-payload-is-a-profile-and-the-order-delivered-is-an-input.md) | The budget fill per payload is a profile, and the order delivered is an input |
+| [0056](0056-a-ticket-is-a-bls12-381-signature-in-g1-over-a-fixed-message-verified-as-commonware-verifies.md) | A ticket is a BLS12-381 signature in G1 over a fixed message, verified as Commonware verifies |

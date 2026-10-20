@@ -1,7 +1,9 @@
 # 10. Claim-gated admission (proposal)
 
-Version 2, 2026-10-13. Version 1, the same day, had every node verify;
-version 2 adds `verifies` and CG-7, and changes nothing else.
+Version 3, 2026-10-20. Version 1, 2026-10-13, had every node verify;
+version 2, the same day, added `verifies` and CG-7; version 3 adds CG-8 to
+CG-10, the bytes a ticket signs, how a node verifies one and where a
+transaction carries it, and changes nothing else.
 
 **Status: proposal.** This document states, as clauses, an admission policy
 that no client implements and no EIP specifies: claim-gated admission,
@@ -20,8 +22,9 @@ node a verification each. Under claim-gated admission a transaction with a
 dependency also carries an **admission claim**, bought in advance for one
 sender, one sequence number and one epoch, and a node checks the sender's
 signature and the claim before it verifies the proof. The claim intended is
-a blind ticket; how one is issued, priced and kept unlinkable is outside
-this document, and is not modelled here.
+a blind ticket: CG-8 gives the bytes a ticket signs, CG-9 how a node
+verifies one and CG-10 where a transaction carries it; how one is issued,
+priced and kept unlinkable is outside this document.
 
 ## What changes
 
@@ -37,7 +40,10 @@ these changes and no others:
   claims under which a proof failed, claims under which a proof was
   verified, and claims of transactions the pool dropped;
 - CG-7 lets a node relay mode 0 wrappers after those checks without
-  verifying their proofs.
+  verifying their proofs;
+- CG-8 to CG-10 say when a real transaction carries a claim and when it is
+  `valid`: an issuer's BLS12-381 signature over a fixed message that names
+  the claim's chain, epoch and slot, carried to a ticket paymaster.
 
 ## Profile
 
@@ -183,15 +189,122 @@ the proofs of the transactions it includes (EIP-8288, Recursive Mempool
 Aggregation), which is a verifier's work, so a relay proposes nothing
 (item 5). Decision record 0038.
 
+## Tickets
+
+The clauses above read a claim's `valid` flag. A real claim is a ticket: an
+issuer's signature over a message naming one slot in one epoch on one
+chain, which the buyer obtained blind, so that the issuer cannot link the
+ticket it signed to the ticket it later sees. Blinding happens between the
+buyer and the issuer and leaves an ordinary signature, so a node verifies a
+ticket as it would any BLS signature. A transaction carries its ticket to a
+*ticket paymaster*, a contract that pays its gas in a `VERIFY` frame after
+checking the same signature on EIP-2537's precompiles, so that a node and
+the chain check one ticket over the same bytes. CG-8 to CG-10 hold for
+every profile that sets `claims`; the vectors of CG-2 to CG-7 give the flag
+directly.
+
+**CG-8. A ticket's message.** For a claim with `sender` $S$, `nonce_keys`
+$K$, `nonce_seq` $s$, `epoch` $e$ and `salt` $t$, on the chain whose ID is
+$c$, the message is
+
+$$m = \mathrm{be}_{32}(c) \Vert S \Vert h(K) \Vert \mathrm{be}_{8}(s) \Vert \mathrm{be}_{8}(e) \Vert t$$
+
+where $\mathrm{be}_{l}(x)$ is $x$ as $l$ bytes, most significant first, $S$
+is the sender's 20 bytes, $h(K)$ is EIP-8250's `nonce_keys_hash` of $K$,
+the 32 bytes `TXPARAM(0x0F)` returns, and $t$ is 32 bytes, so $m$ is 132
+bytes long. A claim has no message when $c$ or a key is not below
+$2^{256}$, when $s$ or $e$ is not below $2^{64}$, or when $S$ is not 20
+bytes or $t$ not 32. **Source:** EIP-8250 at `258836f9`, "Transaction
+introspection", for $h$: the keccak256 of the number of keys and the keys,
+each as 32 bytes; decision record 0056. *Interpretation:* the fields are
+CG-2's claim at fixed widths, so two claims that differ in any field have
+different messages, and a ticket paymaster rebuilds $m$ from `CHAINID` and
+`TXPARAM` with no loop over the keys. $K$ is the keys the transaction
+carries. The chain ID binds a ticket to one chain. The salt is the buyer's,
+so that two tickets for one slot in one epoch are two claims (CG-5);
+decision record 0056.
+
+**CG-9. A ticket's verification.** A ticket carries a `signature`, 128
+bytes, and names an `issuer` key, 256 bytes (CG-10 says how), beside its
+claim's fields, and a node holds for each epoch a set of issuer keys it
+accepts. The claim is `valid` (MD-6) exactly when:
+
+1. it has a message $m$ (CG-8);
+2. `issuer` is in the node's set for the claim's `epoch`;
+3. `issuer` decodes as a point $\mathit{pk}$ of G2 and `signature` as a
+   point $\sigma$ of G1, each in EIP-2537's encoding (each coordinate in 64
+   bytes whose first 16 are zero, below $p$; an element $c_0 + c_1 u$ of
+   $\mathbb{F}_{p^2}$ as $c_0$ then $c_1$), on its curve, in its subgroup of
+   order $r$, and not the point at infinity;
+4. $e(\sigma, P_2) = e(H(u), \mathit{pk})$, where $P_2$ is G2's generator,
+   $u$ is the byte 15, the 15 ASCII bytes `FRAME_TICKET_V1`, then $m$, and
+   $H$ is hash_to_curve with the suite BLS12381G1_XMD:SHA-256_SSWU_RO_ and
+   the domain separation tag `BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_`.
+
+**Source:** RFC 9380, sections 5.3.1, 6.6.2, 6.6.3 and 8.8.1, and appendix
+E.2, for $H$; draft-irtf-cfrg-bls-signature-05, sections 2.7 (CoreVerify)
+and 4.2.3 (the ciphersuite BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_, the
+minimal-signature-size variant), for step 4; EIP-2537 at `258836f9`
+(Final), "Fine points and encoding of base elements" and "Subgroup
+checks", for step 3's encoding and checks; Commonware
+at `c18a6b9`, whose `ops::verify_message` for `MinSig` is steps 3 and 4
+over its own encoding, with $u$ formed by `union_unique`, the namespace's
+length as a varint, then the namespace, then the message. *Interpretation:*
+signatures are in G1, so each transaction carries one point of G1, and keys
+in G2, since an issuer has few. EIP-2537's encoding is the one a ticket
+paymaster hands its precompiles; a node may hold the points in any form.
+The namespace keeps a ticket's message apart from what the same key signs
+through `sign_message` for other purposes, but an issuer that signs blind
+signs whatever point it is sent, so an issuer's key signs tickets and
+nothing else. The point at infinity is refused as a signature, as
+Commonware's decoding refuses it; this changes no verdict, since such a
+signature verifies only against a key at infinity, which step 3 refuses
+already, or for a $u$ that hashes to infinity, which nobody can find.
+Decision record 0056.
+
+**CG-10. Where a ticket rides.** A node holds, for each epoch, a set of
+ticket paymasters it accepts, each an address with its issuer key; the
+issuer keys CG-9 accepts for an epoch are those of its ticket paymasters.
+Under `claims`, a frame transaction carries a claim exactly when a frame of
+its validation prefix is a `VERIFY` frame whose target is a ticket
+paymaster the node accepts for the epoch of its head. The first such frame
+is the ticket's. Its data is $\mathrm{be}_{8}(e) \Vert t \Vert \sigma$, 168
+bytes: the claim's `epoch` $e$, its `salt` $t$, and the `signature`
+$\sigma$ in EIP-2537's 128 bytes. The claim's `sender`, `nonce_keys` and
+`nonce_seq` are the transaction's own, its `issuer` is that paymaster's
+key, and it is `valid` by CG-9. Data of any other length makes a claim that
+is not `valid`. **Source:** decision record 0056. *Interpretation:* the
+frame names the key, so a ticket carries no key of its own and a node
+checks one signature, not one for each key it accepts; a ticket paymaster
+holds one key, so a set of issuers is a set of paymasters. The transaction
+names the slot and the chain, so the frame carries only what it does not:
+the epoch, the salt and the signature. A claim is taken only from a
+paymaster the node accepts at its head, so a ticket to any other contract
+is no claim at all and CG-2 judges the transaction without one; decision
+record 0056.
+
 ## Not modelled
 
 - R5: whatever admission reads is carried in the transaction or owned by
   it. The frame pool's rules on payers (FP-11) are kept as `eip-8288` has them; a transaction paid by a
   sponsor whose balance another transaction can drain is admitted. The
   experiments' honest transactions pay for themselves.
-- How claims are issued and priced, and that they are blind. A claim is a
-  record whose `valid` flag says whether its issuer's signature verifies;
-  how many valid claims an adversary holds is a parameter of an experiment.
+- How claims are issued and priced, and how a buyer blinds and unblinds a
+  ticket. In CG-2 to CG-7 a claim is a record whose `valid` flag is CG-9's
+  verdict; how many valid claims an adversary holds is a parameter of an
+  experiment.
+- How a node learns the ticket paymasters it accepts for an epoch. CG-10
+  takes the set as given; a paymaster that holds its key in its code from
+  deployment lets a node read the key from the chain, but which paymasters
+  to trust is the node's to decide.
+- What a ticket paymaster's `VERIFY` frame costs, and how many of its
+  transactions a pool holds at once. A paymaster that checks a ticket on
+  EIP-2537's precompiles spent 122,006 gas in its frame on the Hegota
+  testnet (`exp-frames` experiment 36), above `eip-8141`'s `max_verify_gas`
+  of 100,000 (FP-1); and under `claim-gated` a ticket paymaster is a payer
+  like any other, so FP-11 lets it sponsor one pending transaction at a
+  time. A profile that admits ticket-paid transactions at the EIP's limits
+  needs a clause for both.
 - What checking a signature, a claim, a proof or an aggregate costs. The
   pool decides; the simulator counts what each decision cost (decision
   record 0037).
@@ -208,3 +321,8 @@ Aggregation), which is a verifier's work, so a relay proposes nothing
   without it. `claim-gated` sets it to true, so the profile's behaviour does
   not change: every vector of version 1 holds unchanged and now says
   version 2.
+- **Version 3.** CG-8 to CG-10 say where a real transaction's claim comes
+  from and what its `valid` flag is: the bytes an issuer signs, a BLS12-381
+  signature over them, and the frame that carries it to a ticket paymaster.
+  Nothing in CG-1 to CG-7 changes: every vector of version 2 holds unchanged
+  and now says version 3.

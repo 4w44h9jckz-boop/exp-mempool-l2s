@@ -21,6 +21,8 @@ from emem import (EIP_8141, FOCIL_PROFILES, GETH, PROFILES, SEALED_PROFILES, Acc
                   Claim, Dependency, Frame, FrameTx, Head, SealedTx, Signature, Stark, State, Tx, TxPool, Wrapper,
                   build_block, build_il, floor_data_gas, intrinsic_gas, next_base_fee, omission)
 from emem.dependencies import union  # noqa: E402
+from emem.claimticket import (TicketClaim, TicketFrame, carried as ticket_carried,  # noqa: E402
+                              message as ticket_message, valid as ticket_valid)
 from emem.focil import admitted  # noqa: E402
 from emem.recentroots import source_id, write_root  # noqa: E402
 from emem.sealed import fees  # noqa: E402
@@ -472,6 +474,45 @@ def run_surface(case: dict) -> None:
             raise Mismatch(f"{where}: unknown step {sorted(step)}")
 
 
+def _ticket_claim(d: dict) -> TicketClaim:
+    return TicketClaim(int(d["chain_id"], 16), int(d.get("epoch", "0x0"), 16), bytes.fromhex(d["sender"][2:]),
+                       int(d["nonce_seq"], 16), tuple(int(k, 16) for k in d["nonce_keys"]),
+                       bytes.fromhex(d.get("salt", "0x")[2:]))
+
+
+def run_claim_ticket(case: dict) -> None:
+    """`docs/spec/10-claim-gated-admission.md`, CG-8 to CG-10: a ticket's message, its verdict, and where it rides."""
+    if "frames" in case:  # CG-10
+        epoch = int(case["head_epoch"], 16)
+        paymasters, accepted = {}, {}
+        for p in case["paymasters"]:
+            key = bytes.fromhex(p["key"][2:])
+            accepted.setdefault(int(p["epoch"], 16), set()).add(key)
+            if int(p["epoch"], 16) == epoch:
+                paymasters[bytes.fromhex(p["address"][2:])] = key
+        frames = [TicketFrame(f["mode"], bytes.fromhex(f["target"][2:]), bytes.fromhex(f["data"][2:]))
+                  for f in case["frames"]]
+        found = ticket_carried(_ticket_claim(case["tx"]), frames, paymasters, accepted)
+        if found is None:
+            got = {"claim": None}
+        else:
+            (e, salt, issuer), ok = found
+            got = {"claim": {"epoch": None if e is None else hex(e), "salt": None if salt is None else "0x" + salt.hex(),
+                             "issuer": "0x" + issuer.hex()}, "valid": ok}
+        _compare(case["expect"], got, "claim_ticket")
+        return
+    claim = _ticket_claim(case["claim"])
+    m = ticket_message(claim)
+    got = {"message": None if m is None else "0x" + m.hex()}
+    if "issuer" in case:
+        accepted: dict[int, set[bytes]] = {}
+        for a in case["issuers"]:
+            accepted.setdefault(int(a["epoch"], 16), set()).update(bytes.fromhex(k[2:]) for k in a["keys"])
+        got["valid"] = ticket_valid(claim, bytes.fromhex(case["issuer"][2:]),
+                                    bytes.fromhex(case["signature"][2:]), accepted)
+    _compare(case["expect"], got, "claim_ticket")
+
+
 def run_replay(case: dict) -> None:
     """`docs/spec/12-replay.md`: one fixture under one profile."""
     name = case.get("profile", EIP_8141.name)
@@ -485,7 +526,7 @@ def run_replay(case: dict) -> None:
 
 OPERATIONS = {"next_base_fee": run_next_base_fee, "intrinsic_gas": run_intrinsic_gas,
               "frame_gas": run_frame_gas, "ticket_fee": run_ticket_fee, "pool": run_pool,
-              "surface": run_surface, "replay": run_replay}
+              "surface": run_surface, "replay": run_replay, "claim_ticket": run_claim_ticket}
 
 
 def vector_files(args: list[str]) -> list[Path]:
