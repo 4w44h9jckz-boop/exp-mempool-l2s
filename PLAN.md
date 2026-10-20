@@ -31,7 +31,7 @@ its own `exp/NN-name`.
 | `docs/spec/07-focil.md` | Version 2. EIP-7805 at `258836f9` as a constraint on the builder, with EIP-8369's profiles for what can be enforced, 8 clauses, profiles `eip-7805` and `eip-8369` and a `policy` variant for what an includer lists first (decision record 0018); since version 2 the budget fill per list or per payload, with the profile `ethrex`, the order delivered as an input, and validity at a node without the post-state as a verdict (decision record 0055) |
 | `docs/spec/08-recent-roots.md` | Version 2. EIP-8272 at `258836f9` on top of the frame pool, 8 clauses, profile `eip-8272`, with `RECENT_ROOT_CODE`, which the EIP leaves unset, a named string, and the margin a node keeps as `root_margin`, 0 in the profile (decision record 0023); since version 2 `hegota-testnet` too, at the testnet's constants, and a transaction with a client's verdict keeps its root expiry (decision record 0053) |
 | `docs/spec/09-expiring-nonces.md` | Version 1. EIP-8266 at `258836f9`, unchanged at `af80fc1c`, on top of the frame pool, composed with EIP-8250 as the reserved key its Rationale names, 7 clauses, profile `eip-8266`, with whether a node admits several pending in the mode as `expiring_per_sender`, `many` in the profile (decision record 0030) |
-| `docs/spec/10-claim-gated-admission.md` | Version 2. A proposal of this repository: claim-gated admission on the `eip-8288` profile, 7 clauses, profile `claim-gated`, with what a node remembers after a failed proof as `claim_memory` and whether a sender's signature covers a wrapper's proofs as `signed_proofs`, false in the profile as in EIP-8288 (decision record 0037), and relays, nodes that check claims and verify no proof, as `verifies` (decision record 0038) |
+| `docs/spec/10-claim-gated-admission.md` | Version 3. A proposal of this repository: claim-gated admission on the `eip-8288` profile, 10 clauses, profile `claim-gated`, with what a node remembers after a failed proof as `claim_memory` and whether a sender's signature covers a wrapper's proofs as `signed_proofs`, false in the profile as in EIP-8288 (decision record 0037), and relays, nodes that check claims and verify no proof, as `verifies` (decision record 0038); version 3 (on `base`) adds the ticket: the 132 bytes an issuer signs, a BLS12-381 signature in EIP-2537's encoding, and the frame to a ticket paymaster that carries it (decision record 0056) |
 | `docs/spec/11-surface.md` | Version 2. The surface around a frame pool for the plan's item 42: a type `0x06` transaction decoded from its bytes and named by its keccak256, the validation prefix's outcome from an execution client's verdict, `eth_sendRawTransaction`, relay to peers over `eth` or `gossipsub` and what is taken from them, head changes and hand-off to a client, 9 clauses and a run procedure; read from EIP-8141 and EIP-8250 at `258836f9`, go-ethereum at `93d78a01`, gossipsub v1.1 and ethrex at `64b8fc09` (decision record 0051); version 2 decodes a recent-root verifier frame's tuples and takes a head's slot from its `slotNumber` (decision record 0053) |
 | `docs/spec/12-replay.md` | Version 2. A procedure for the plan's item 43: a profile's verdict on a transaction a chain mined, from its bytes, its receipt's payer and its parent header, and the differences between profile and chain named before any replay (decision records 0052 and 0053) |
 | `docs/aztec-as-not-a-rollup.md` | A reading, not normative: Aztec's node (aztec-node at `54e3383c`, aztec-packages at `5a63848e`) job by job against the clauses and experiments here, what fits, what fits with work and what does not; proposes items 35 and 36 (decision record 0047) |
@@ -181,6 +181,18 @@ they added; their experiments are not part of this repository.
     transactions (decision record 0055); skandha's node answers
     `skandha_frameInclusionList`.
 
+### Started
+
+49. **Claim-gated admission in a second implementation.**
+    `10-claim-gated-admission.md` and its vectors implemented in TypeScript,
+    with a BLS12-381 library for the ticket. *Started, 2026-10-20:* version
+    3 on `base` gives the ticket its bytes, its check and its frame, CG-8 to
+    CG-10, in the format a wallet ran on the Hegota testnet (decision record
+    0056); skandha plays all 61 ticket vectors on `@noble/curves`, and
+    claim-gated admission with received wrappers. Left: which ticket
+    paymasters a node accepts, and a node that takes a ticket from a real
+    transaction.
+
 ### Not started
 
 25. **Sealed inputs to a committee's computation.** Computing on sealed
@@ -216,9 +228,6 @@ they added; their experiments are not part of this repository.
 48. **The sealed subpool and a key publisher.** `06-lucid.md` as it stands,
     and the key publisher's side: when it releases a key, and what a
     withheld key leaves behind.
-49. **Claim-gated admission in a second implementation.**
-    `10-claim-gated-admission.md` and its vectors implemented in TypeScript,
-    with a BLS12-381 library for the ticket.
 
 ## Growing the base
 
