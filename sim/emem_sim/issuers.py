@@ -24,7 +24,9 @@ a clause; each is modelled at a node, around the clauses, to price it:
 
 Each refuses in CG-2's place, before the ticket's signature is checked and
 before the prefix runs, since a node reads a ticket's issuer from the
-paymaster's code. A claim's issuer is not in the model's claim (MD-6): the
+paymaster's code. The bond has since become a clause, CG-11 of version 5
+(decision record 0064); the model here stays as experiment 26 ran it, on
+version 4's admission, with `bond` false in the profile. A claim's issuer is not in the model's claim (MD-6): the
 loads that make claims name it in `Issuers`, and the defences read it from
 there. Each node counts, by load, the ticket checks, prefix simulations and
 refusals it ran (`counts`).

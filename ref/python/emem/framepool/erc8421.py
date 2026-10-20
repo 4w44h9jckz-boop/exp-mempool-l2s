@@ -19,7 +19,7 @@ from ..model import Head, State
 from ..tx import APPROVE_PAYMENT, APPROVE_SCOPE_MASK, ATOMIC_BATCH_FLAG, VERIFY_MODE, FrameTx, replaces
 from .config import FramePoolConfig
 from .matcha import admission_gas
-from .pool import Entry, FramePool
+from .pool import ACTIVE, BANNED_STATE, THROTTLED, Entry, FramePool, staked
 from .prefix import (BANNED_OPCODES, DEPLOY, EXPIRY, ONLY_VERIFY, PAY, RECOGNIZED, SELF_VERIFY, Prefix, Simulation,
                      analyse, check_fp3, classify, classify_payer, default_code_approves)
 
@@ -28,7 +28,6 @@ APPROVING = (SELF_VERIFY, ONLY_VERIFY, PAY)
 CREATION = frozenset({"CREATE", "CREATE2", "SETDELEGATE"})
 BANNED = BANNED_OPCODES - CREATION - {"SSTORE"}  # AM-8: OPCODES-020 and CREATION-010 take these
 STAKED_ONLY = frozenset({"BALANCE", "SELFBALANCE"})  # OPCODES-010
-ACTIVE, THROTTLED, BANNED_STATE = "ACTIVE", "THROTTLED", "BANNED"
 
 
 class Refusal(TxError):
@@ -123,13 +122,6 @@ class Entities:
             if a is not None and a not in out:
                 out.append(a)
         return tuple(out)
-
-
-def staked(addr: str, state: State, cfg: FramePoolConfig) -> bool:
-    """AM-3 [STAKING-010]: never a default-code entity."""
-    stake, delay, withdrawing = state.stake(addr)
-    return state.code(addr) != "" and stake >= cfg.min_stake_value and delay >= cfg.min_unstake_delay \
-        and not withdrawing
 
 
 def entities(tx: FrameTx, prefix: Prefix, state: State, cfg: FramePoolConfig) -> Entities:
@@ -287,31 +279,7 @@ def validate(tx: FrameTx, prefix: Prefix, head: Head, state: State, cfg: FramePo
 class StandardPool(FramePool):
     """A frame pool under ERC-8421's standard ruleset (`config.ruleset == "erc-8421"`)."""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.counters: dict[str, list[int]] = {}  # AM-13: by address, [seen, included]
-        self.refreshed = 0  # how many refreshes the pool's time has passed
-
-    # --- AM-13: reputation ----------------------------------------------------
-
-    def give(self, addr: str, seen: int, included: int) -> None:
-        """AM-13: the counters a node was given for `addr`."""
-        self.counters[addr] = [seen, included]
-
-    def reputation(self, addr: str) -> dict:
-        """AM-13: an entity's counters and state (MD-9)."""
-        seen, included = self.counters.get(addr, (0, 0))
-        return {"seen": seen, "included": included, "status": self.state_of(addr)}
-
-    def state_of(self, addr: str) -> str:
-        cfg = self.config
-        seen, included = self.counters.get(addr, (0, 0))
-        m = seen // cfg.min_inclusion_rate_denominator
-        if m > included + cfg.ban_slack:
-            return BANNED_STATE
-        if included + cfg.throttling_slack < m:
-            return THROTTLED
-        return ACTIVE
+    # --- AM-13: reputation, with the counters the frame pool keeps -------------
 
     def ops_allowed(self, addr: str) -> int:
         """REPUTATION-220, in integers as written."""
@@ -319,19 +287,6 @@ class StandardPool(FramePool):
         seen, included = self.counters.get(addr, (0, 0))
         extra = included * min(included, cfg.max_txs_allowed_unstaked_entity) // seen if seen else 0
         return cfg.same_unstaked_entity_mempool_count + extra
-
-    def _bump(self, addr: str, seen: int = 0, included: int = 0) -> None:
-        c = self.counters.setdefault(addr, [0, 0])
-        c[0], c[1] = max(0, c[0] + seen), max(0, c[1] + included)
-
-    def _expire(self, now: float) -> None:
-        """REPUTATION-010's refresh, every `refresh_seconds` of the pool's time."""
-        super()._expire(now)
-        due = int(now // self.config.refresh_seconds)
-        while self.refreshed < due:
-            for c in self.counters.values():
-                c[0], c[1] = c[0] * 23 // 24, c[1] * 23 // 24
-            self.refreshed += 1
 
     def _count(self, test, replaced: list[str]) -> int:
         return sum(1 for h, e in self.entries.items() if h not in replaced and test(e))

@@ -778,9 +778,10 @@ def work(sim, origin=None, event=None, load=None) -> int:
 
 
 class TestClaims(unittest.TestCase):
-    """Claim-gated admission (`docs/spec/10-claim-gated-admission.md`, decision record 0037)."""
+    """Claim-gated admission (`docs/spec/10-claim-gated-admission.md`, decision record 0037), without CG-11's bond:
+    the wallets' spends pay for themselves, and these tests are of CG-2 to CG-7."""
 
-    GATED = CLAIM_GATED.with_(cap_aggregates=False)
+    GATED = CLAIM_GATED.with_(cap_aggregates=False, bond=False)
 
     def test_wallets_with_claims_land_and_each_node_verifies_a_proof_of_each_once(self):
         sim, load, rec = aggregating(self.GATED, claims=True)
@@ -1505,9 +1506,10 @@ def landed_any(sim, versions):
 
 
 class TestIssuers(unittest.TestCase):
-    """Ticket issuers, and the two defences modelled around CG-2 and CG-4 (decision record 0059)."""
+    """Ticket issuers, and the two defences modelled around CG-2 and CG-4 (decision record 0059), on version 4's
+    admission, without CG-11's bond, as experiments 25 and 26 run them."""
 
-    GATED = CLAIM_GATED.with_(cap_aggregates=False)
+    GATED = CLAIM_GATED.with_(cap_aggregates=False, bond=False)
     PAYERS = {f"x{i}": 10**20 for i in range(4)} | {"h": 10**20}
 
     def guarded(self, defence, *junk, run=300):

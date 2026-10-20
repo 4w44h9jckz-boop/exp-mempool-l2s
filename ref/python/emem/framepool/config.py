@@ -85,7 +85,9 @@ class FramePoolConfig:
     claim_memory: str = "slot"  # CG-4: "slot" (R3), "claim" (its variant) or "none"
     signed_proofs: bool = False  # CG-3: whether a sender's signature covers its wrapper's proofs
     verifies: bool = True  # CG-7: false makes the node a relay, which verifies no proof
-    # 14-erc-8421.md, AM-1, read only when ruleset is "erc-8421"; a descriptor sets them (13-descriptors.md, DS-6)
+    bond: bool = False  # CG-11: a bond on the ticket paymaster, with AM-1's stake and reputation parameters below
+    # 14-erc-8421.md, AM-1, read when ruleset is "erc-8421", and the stake and reputation ones under `bond` (CG-11);
+    # a descriptor sets them (13-descriptors.md, DS-6)
     ruleset: str = "eip-8141"
     max_verify_gas_per_entity: int = 100_000
     max_verify_gas_staked_entity: int = 1_000_000
@@ -130,7 +132,7 @@ EIP_8272 = FramePoolConfig(name="eip-8272", recent_roots=True)
 
 EIP_8266 = FramePoolConfig(name="eip-8266", expiring=True)
 
-CLAIM_GATED = EIP_8288.with_(name="claim-gated", claims=True)
+CLAIM_GATED = EIP_8288.with_(name="claim-gated", claims=True, bond=True)
 
 PROFILES = {c.name: c for c in (EIP_8141, HEGOTA_TESTNET, MATCHA, EIP_8288, EIP_8288_MASTER, EIP_8272, EIP_8266,
                                  CLAIM_GATED)}
