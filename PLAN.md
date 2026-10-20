@@ -196,6 +196,16 @@ they added; their experiments are not part of this repository.
     and checks it before the client is asked (decision record 0058); a
     skandha node does both against the testnet with no configuration.
     Finished when `base` reaches `main`.
+50. **A self-issuer's junk proofs, and two defences.** Version 4 accepts
+    any ticket paymaster, so anyone can issue tickets to themselves, and a
+    junk proof costs every node a ticket check, a prefix and a proof while
+    costing its self-issuer nothing after one deployment. What do issuer
+    memory, for two values of $k$, and a node list cost, in node work, in
+    the attacker's spend and in honest senders' delay? Both are modelled in
+    the simulator and neither is specified (decision record 0059); the
+    choice between them stays open. *Done on `exp/25-ticket-defences`,
+    2026-10-20:* `experiments/25-ticket-defences/`. Finished when it
+    reaches `main`.
 
 ### Not started
 
