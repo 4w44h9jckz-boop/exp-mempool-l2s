@@ -66,3 +66,4 @@ and says so.
 | [0059](0059-two-defences-against-a-self-issuers-junk-proofs-are-modelled-in-the-simulator-not-specified.md) | Two defences against a self-issuer's junk proofs are modelled in the simulator, not specified |
 | [0060](0060-a-ruleset-is-a-descriptor-file-with-a-content-identifier-modules-and-a-parent.md) | A ruleset is a descriptor file, with a content identifier, modules and a parent |
 | [0061](0061-erc-8421-s-standard-ruleset-read-into-the-model.md) | ERC-8421's standard ruleset, read into the model |
+| [0062](0062-a-bond-on-the-ticket-paymaster-is-modelled-in-the-simulator-as-erc-8421-s-stake-and-reputation.md) | A bond on the ticket paymaster is modelled in the simulator, as ERC-8421's stake and reputation |
