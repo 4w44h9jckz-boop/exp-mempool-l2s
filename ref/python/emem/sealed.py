@@ -11,6 +11,7 @@ from dataclasses import dataclass, field, replace
 from functools import cached_property
 from typing import Iterable
 
+from .keccak import keccak256
 from .model import State
 from .tx import _hash
 
@@ -74,6 +75,11 @@ class SealedTx:
     pays: tuple[tuple[str, int], ...] | None = field(default=None, metadata={"omit_none": True})
     atomic: bool | None = field(default=None, metadata={"omit_none": True})  # None is true
     revert_used: int | None = field(default=None, metadata={"omit_none": True})
+    # LU-2 version 3: the DEM key, the ticket's key_commitment and whether the ciphertext decrypts (LU-15);
+    # absent, the hash is as it was under version 2
+    k_dem: bytes | None = field(default=None, metadata={"omit_none": True})  # None is 32 zero bytes
+    key_commitment: bytes | None = field(default=None, metadata={"omit_none": True})  # None is keccak256(k_dem)
+    decrypts: bool | None = field(default=None, metadata={"omit_none": True})  # None is true
 
     @cached_property
     def hash(self) -> str:
@@ -102,6 +108,16 @@ class SealedTx:
     def reverted_used(self) -> int:
         """LU-2: the plaintext's dual_gas_used if its execution reverts."""
         return self.dual_gas_used if self.revert_used is None else self.revert_used
+
+    @property
+    def dem_key(self) -> bytes:
+        """LU-2: the 32-byte key a key message for it releases."""
+        return bytes(32) if self.k_dem is None else self.k_dem
+
+    @property
+    def commitment_key(self) -> bytes:
+        """LU-2, LU-14: the ticket's key_commitment."""
+        return keccak256(self.dem_key) if self.key_commitment is None else self.key_commitment
 
     def name(self) -> str:
         return self.label or self.hash[:10]

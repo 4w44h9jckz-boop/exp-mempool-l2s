@@ -29,6 +29,7 @@ from emem.claimticket import (TicketClaim, TicketFrame, carried as ticket_carrie
 from emem.focil import admitted  # noqa: E402
 from emem.recentroots import source_id, write_root  # noqa: E402
 from emem.sealed import fees  # noqa: E402
+from emem import lucidkeys  # noqa: E402
 from emem.surface import SURFACE_PROFILES, Surface, address_form, decode, verdict  # noqa: E402
 from emem.errors import TxError  # noqa: E402
 from emem.replay import replay  # noqa: E402
@@ -583,7 +584,101 @@ def run_replay(case: dict) -> None:
     _compare(case["expect"], got, "replay")
 
 
-OPERATIONS = {"next_base_fee": run_next_base_fee, "intrinsic_gas": run_intrinsic_gas,
+def _hexbytes(h: str) -> bytes:
+    return bytes.fromhex(h[2:])
+
+
+def _sealed(d: dict) -> SealedTx:
+    d = dict(d)
+    d.pop("type", None)
+    for key in ("k_dem", "key_commitment"):
+        if key in d:
+            d[key] = _hexbytes(d[key])
+    return make_tx({**d, "type": "st"})
+
+
+def run_key_round(case: dict) -> None:
+    """`docs/spec/06-lucid.md`, LU-14 to LU-19: the key round over one scheduling block."""
+    chain_id = case.get("chain_id", 1)
+    b = case["block"]
+    sts = tuple(_sealed(d) for d in b["commitments"])
+    block = lucidkeys.SchedulingBlock(b.get("root", "B"), b.get("slot", 1), sts, b.get("gas_limit", 30_000_000),
+                                      b.get("attested", True))
+    blocks = lucidkeys.Blocks([block], chain_id)
+    cfg = SEALED_PROFILES["eip-8184"].with_(**case.get("config", {}).get("sealed", {}))
+    labels = [st.label for st in sts]
+    names: dict[str, lucidkeys.KeyMessage] = {}
+    read: list[int] = []
+
+    def decrypt(blk, j, k):
+        read.append(j)
+        return lucidkeys.read_decrypts(blk, j, k)
+
+    def message(m) -> lucidkeys.KeyMessage:
+        if isinstance(m, str):
+            return names[m]
+        j = m.get("commit_index", 0)
+        default = [sts[j].dem_key] if 0 <= j < len(sts) else [bytes(32)]
+        keys = tuple(_hexbytes(k) for k in m["k_dems"]) if "k_dems" in m else tuple(default)
+        return lucidkeys.KeyMessage(m.get("chain_id", chain_id), m.get("root", block.root), m.get("slot", block.slot),
+                                    j, keys)
+
+    def received(entries) -> list:
+        return [(names[n], at) for n, at in entries]
+
+    def read_labels() -> list[str]:
+        return [labels[j] for j in sorted(set(read))]
+
+    counts = None
+    for i, step in enumerate(case["steps"]):
+        where = f"step {i}"
+        read.clear()
+        if "commitments" in step:
+            got = [{"root": labels[j], "key": "0x" + c.key.hex(), "gas_obligation": c.gas_obligation,
+                    "executable": list(c.executable)} for j, c in enumerate(block.commitments())]
+            _compare(step["expect"], got, where)
+        elif "release" in step:
+            r = step["release"]
+            msgs = lucidkeys.release(block, r["publisher"], cfg, chain_id, r.get("observed", True))
+            for m in msgs:
+                names[labels[m.commit_index]] = m
+            _compare(step["expect"], [labels[m.commit_index] for m in msgs], where)
+        elif "message" in step:
+            m = message(step["message"])
+            if "as" in step:
+                names[step["as"]] = m
+            got = lucidkeys.check(m, blocks, decrypt)
+            _compare(step["expect"], got, where)
+            if "expect_read" in step:
+                _compare(step["expect_read"], bool(read), where + " read")
+        elif "vote" in step:
+            v = step["vote"]
+            got = lucidkeys.vote(block, blocks, received(v["received"]), v["deadline"], decrypt)
+            _compare(step["expect"], list(got), where)
+            if "expect_read" in step:
+                _compare(step["expect_read"], read_labels(), where + " read")
+        elif "tally" in step:
+            t = step["tally"]
+            counts = lucidkeys.tally(len(sts), t["ptc"], t["vote_deadline"], t["attestation"],
+                                     [(m, tuple(bits), at) for m, bits, at in t["votes"]])
+            _compare(step["expect"], [list(c.allowed()) for c in counts], where)
+            if "expect_counts" in step:
+                _compare(step["expect_counts"], [dict(t1=c.t1, t0=c.t0, l1=c.l1, l0=c.l0, e=c.e) for c in counts],
+                         where + " counts")
+        elif "blame" in step:
+            if counts is None:
+                raise Mismatch(f"{where}: blame before a tally")
+            bl = step["blame"]
+            revealed, missing = lucidkeys.blame(block, blocks, counts, received(bl["received"]), bl["deadline"],
+                                                decrypt)
+            got = {"revealed": [labels[j] for j in revealed], "missing": {labels[j]: o for j, o in missing.items()}}
+            if got != step["expect"]:  # exact: an empty `missing` expects none
+                raise Mismatch(f"{where}: expected {step['expect']!r}, got {got!r}")
+        else:
+            raise Mismatch(f"{where}: unknown step {sorted(step)}")
+
+
+OPERATIONS = {"key_round": run_key_round, "next_base_fee": run_next_base_fee, "intrinsic_gas": run_intrinsic_gas,
               "frame_gas": run_frame_gas, "ticket_fee": run_ticket_fee, "pool": run_pool,
               "surface": run_surface, "replay": run_replay, "claim_ticket": run_claim_ticket,
               "descriptor": run_descriptor}

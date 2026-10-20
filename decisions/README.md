@@ -67,3 +67,4 @@ and says so.
 | [0060](0060-a-ruleset-is-a-descriptor-file-with-a-content-identifier-modules-and-a-parent.md) | A ruleset is a descriptor file, with a content identifier, modules and a parent |
 | [0061](0061-erc-8421-s-standard-ruleset-read-into-the-model.md) | ERC-8421's standard ruleset, read into the model |
 | [0062](0062-a-bond-on-the-ticket-paymaster-is-modelled-in-the-simulator-as-erc-8421-s-stake-and-reputation.md) | A bond on the ticket paymaster is modelled in the simulator, as ERC-8421's stake and reputation |
+| [0070](0070-the-key-round-is-specified-from-the-eips-text-with-real-keys-and-decryption-as-a-field.md) | The key round is specified from the EIP's text, with real keys and decryption as a field |

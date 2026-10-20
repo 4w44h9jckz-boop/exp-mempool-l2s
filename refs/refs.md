@@ -237,6 +237,20 @@ says is checked against the primary source before it is relied on.
   intermediaries can offer, e.g., offchain revert protection, that the
   public path cannot replicate"). Used for LU-13 in `docs/spec/06-lucid.md`
   version 2 and decision record 0045.
+  Read again 2026-10-20, at `258836f9` and byte-identical on master
+  `ed9b712690ba810f652d2ec76293ec5c299e2069`, for the key round: Extended
+  payload bid with ST-commitments ("For a non-bundle commitment,
+  `executable` is empty and `gas_obligation = ticket.gas_limit`"), Key
+  message and its validity (the five conditions, the fifth "successfully
+  decrypts the transaction(s)"), Key release (the publisher's checks before
+  release, and "When the key publisher is confident that the beacon block
+  will become canonical (for example after observing attestations for
+  it)"), Key timeliness (`keys_observed`, `timely_1`, `timely_0`, `late_1`,
+  `late_0`, `equivocated_votes`, the two conditions, and "If this test
+  fails for any key, the PTC of the next slot votes against the payload
+  timeliness"; the deadlines are named, with no values), and Rationale, Key
+  publisher liability for non-reveal. Used for LU-14 to LU-19 in
+  `docs/spec/06-lucid.md` version 3 and decision record 0070.
 - **EIP-7805, Fork-choice enforced Inclusion Lists (FOCIL)**, Draft, same
   commit, read 2026-10-08 first only for `IL_COMMITTEE_SIZE`, 16, from which
   EIP-8184 derives `MAX_ST_COMMITS`. Read in full the same day, and unchanged
