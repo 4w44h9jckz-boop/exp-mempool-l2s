@@ -105,7 +105,7 @@ def deps_json(deps) -> list:
     return [[d.scheme, d.data_hash, d.vk_hash] for d in deps]
 
 
-def make_wrapper(d: dict) -> Wrapper:
+def make_wrapper(d: dict, cfg=None) -> Wrapper:
     """AG-5; `deps`, `proofs` and `stark` default to an honest wrapper's (conformance/README.md)."""
     entries, txs = [], []
     for t in d["txs"]:
@@ -116,7 +116,7 @@ def make_wrapper(d: dict) -> Wrapper:
             tx = make_tx(t)
             entries.append(tx)
         txs.append(tx)
-    deps = make_deps(d["deps"]) if "deps" in d else union(txs)
+    deps = make_deps(d["deps"]) if "deps" in d else union(txs, cfg)  # honest under the case's profile
     proofs = tuple(d.get("proofs", [True] * len(deps)))
     stark = None
     if d["mode"] != 0:
@@ -282,7 +282,7 @@ def run_pool(case: dict) -> None:
                     raise Mismatch(f"{where}: rules expected {step['expect_rules']}, got {rules}")
         elif "wrapper" in step:
             now = step.get("now", now)
-            got = aggregator.receive(make_wrapper(step["wrapper"]), now)
+            got = aggregator.receive(make_wrapper(step["wrapper"], frame_cfg), now)
             if "expect" in step and got != step["expect"]:
                 raise Mismatch(f"{where}: wrapper expected {step['expect']}, got {got}")
         elif "aggregate" in step:

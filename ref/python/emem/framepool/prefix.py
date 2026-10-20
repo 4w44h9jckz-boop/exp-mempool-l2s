@@ -18,7 +18,7 @@ from ..dependencies import check_frame, check_limits
 from ..errors import TxError
 from ..model import Head, State, is_delegation
 from ..tx import (APPROVE_EXECUTION, APPROVE_PAYMENT, APPROVE_SCOPE_MASK, ATOMIC_BATCH_FLAG, DEFAULT_MODE,
-                  DEP_VERIFY_MODE, MAX_FRAMES, SENDER_MODE, SIGNATURE_GAS, TX_MAX_GAS_LIMIT, VERIFY_MODE, Frame,
+                  MAX_FRAMES, SENDER_MODE, SIGNATURE_GAS, TX_MAX_GAS_LIMIT, VERIFY_MODE, Frame,
                   FrameTx)
 from .config import FramePoolConfig
 
@@ -93,7 +93,7 @@ def executed(tx: FrameTx, cfg: FramePoolConfig) -> tuple[Frame, ...]:
     """AG-3: the frames FP-4 to FP-6 see, which are all of them unless the profile admits dependency frames."""
     if not cfg.dependency_frames:
         return tx.frames
-    return tuple(f for f in tx.frames if f.mode != DEP_VERIFY_MODE)
+    return tuple(f for f in tx.frames if f.mode != cfg.dep_frame_mode)
 
 
 def analyse(tx: FrameTx, cfg: FramePoolConfig) -> Prefix | None:
@@ -141,8 +141,10 @@ def check_fp3(tx: FrameTx, gas_limit: int, cfg: FramePoolConfig) -> None:
         _fail(E.ErrFrameMalformed)
     expiry_frames = 0
     for i, f in enumerate(frames):
-        if f.mode == DEP_VERIFY_MODE and cfg.dependency_frames:  # AG-2 in place of the rules below
-            check_frame(f, cfg.max_dependencies_per_frame)
+        if f.mode == cfg.dep_frame_mode and cfg.dependency_frames:  # AG-2 in place of the rules below
+            check_frame(f, cfg)
+            if not cfg.dep_in_batch and i and frames[i - 1].flags & ATOMIC_BATCH_FLAG:
+                _fail(E.ErrDepFrameMalformed)
             continue
         if f.mode not in (DEFAULT_MODE, VERIFY_MODE, SENDER_MODE) or not 0 <= f.flags < 8:
             _fail(E.ErrFrameMalformed)
@@ -181,7 +183,7 @@ def _static(tx: FrameTx, gas_limit: int, cfg: FramePoolConfig) -> Prefix:
 
     # AG-4: limits per transaction
     if cfg.dependency_frames:
-        check_limits(tx, cfg.max_sigs_per_tx, cfg.max_starks_per_tx)
+        check_limits(tx, cfg)
 
     # FP-5: structure, over the frames AG-3 leaves
     kinds = [classify(f, sender, cfg) for f in executed(tx, cfg)]

@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from typing import Callable
 
 from .. import errors as E
+from ..dependencies import dependencies
 from ..errors import TxError
 from ..model import Head, State, is_delegation
 from ..reserver import Reserver
@@ -297,7 +298,7 @@ class FramePool:
         """CG-2, then CG-4, then CG-6, as the pool runs them after FP-6."""
         claim = tx.claim
         if claim is None:
-            if tx.dependencies:
+            if dependencies(tx, self.config):
                 raise TxError(E.ErrClaimMissing)
             return
         if not claim.valid:
@@ -324,7 +325,7 @@ class FramePool:
             if self.config.claims:  # CG-2, CG-4, CG-6
                 self._check_claim(tx)
             if self.config.dependency_frames and not all(d in self.proven or d in self.relayed
-                                                          for d in tx.dependencies):  # AG-6, CG-7 step 3
+                                                          for d in dependencies(tx, self.config)):  # AG-6, CG-7 step 3
                 raise TxError(E.ErrFrameDepsUnproven)
             self.work[tx.sender] += admission_gas(tx, prefix)
             old_hash = None if self._many(tx) else self.by_identity.get((tx.sender, tx.nonce_keys, tx.nonce_seq))

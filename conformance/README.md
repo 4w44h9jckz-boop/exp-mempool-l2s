@@ -149,7 +149,7 @@ the sealed pool behind one shared reservation tracker, through a list of
 
 | Case key | Default | Holds |
 | --- | --- | --- |
-| `profile` | `eip-8141` | the frame pool profile (FP-1, `matcha` of MA-1, `eip-8288` of AG-1, or `eip-8272` of RR-1); the nonce pool always uses `geth` |
+| `profile` | `eip-8141` | the frame pool profile (FP-1, `matcha` of MA-1, `eip-8288` and `eip-8288-master` of AG-1, or `eip-8272` of RR-1); the nonce pool always uses `geth` |
 | `descriptor` | none | in place of `profile`: the stem of a file of `docs/spec/descriptors/`, loaded after its parents, whose ruleset the frame pool runs (DS-6); with it, every refusal must name a rule of the descriptor (DS-7) |
 | `reputation` | `{}` | under `erc-8421`: the counters the node was given, address to `{"seen": s, "included": i}` (AM-13) |
 | `sealed` | `off` | the sealed pool profile (LU-1): `off`, which refuses every sealed transaction, or `eip-8184` |

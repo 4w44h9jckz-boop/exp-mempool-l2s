@@ -1,5 +1,5 @@
 """FP-1: the `eip-8141` and `hegota-testnet` profiles; MA-1: the `matcha` proposal; AG-1: `eip-8288`;
-RR-1: `eip-8272`; EN-1: `eip-8266`; CG-1: the `claim-gated` proposal."""
+RR-1: `eip-8272`; EN-1: `eip-8266`; CG-1: the `claim-gated` proposal; AG-1 also `eip-8288-master`."""
 
 from __future__ import annotations
 
@@ -40,6 +40,11 @@ class FramePoolConfig:
     contention: str = "sender"  # MA-14: what a class is, "sender", "storage" or "slot"
     # AG-1, read only when dependency_frames is true
     dependency_frames: bool = False
+    dep_frame_mode: int = 3  # DEP_VERIFY_FRAME_MODE: 3 at the pinned commit, 4 on master
+    leanstark: str = "defined"  # or "reserved", as on master (AG-2)
+    dep_in_batch: bool = True  # whether a dependency frame may follow a frame with ATOMIC_BATCH_FLAG (AG-2)
+    zero_data_hash: str = "literal"  # or "sig_hash": a zero data_hash stands for the signature hash (AG-4)
+    mode_1_union: bool = False  # whether AG-5 checks a mode 1 wrapper's deps against its transactions
     max_dependencies_per_frame: int = 256
     max_sigs_per_tx: int = 16
     max_starks_per_tx: int = 1
@@ -118,10 +123,14 @@ MATCHA = FramePoolConfig(name="matcha", per_sender="matcha", reuse_balance=True)
 
 EIP_8288 = FramePoolConfig(name="eip-8288", dependency_frames=True)
 
+EIP_8288_MASTER = EIP_8288.with_(name="eip-8288-master", dep_frame_mode=4, leanstark="reserved", dep_in_batch=False,
+                                 zero_data_hash="sig_hash", mode_1_union=True)  # AG-1, decision record 0063
+
 EIP_8272 = FramePoolConfig(name="eip-8272", recent_roots=True)
 
 EIP_8266 = FramePoolConfig(name="eip-8266", expiring=True)
 
 CLAIM_GATED = EIP_8288.with_(name="claim-gated", claims=True)
 
-PROFILES = {c.name: c for c in (EIP_8141, HEGOTA_TESTNET, MATCHA, EIP_8288, EIP_8272, EIP_8266, CLAIM_GATED)}
+PROFILES = {c.name: c for c in (EIP_8141, HEGOTA_TESTNET, MATCHA, EIP_8288, EIP_8288_MASTER, EIP_8272, EIP_8266,
+                                 CLAIM_GATED)}

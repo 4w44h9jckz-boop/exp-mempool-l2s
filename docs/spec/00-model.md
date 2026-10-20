@@ -1,14 +1,14 @@
 # 00. The model: accounts, heads, transactions, the pool interface, fees
 
-Version 10, 2026-10-20. Version 1 left the EIP-8250 nonce fields out of
+Version 11, 2026-10-20. Version 1 left the EIP-8250 nonce fields out of
 FEE-4 and had no `finalize` operation, version 2 had no dependency frames,
 version 3 had no sealed transactions, version 4 gave an authorization no
 nonce of its own, version 5 gave a frame transaction no admission claim,
 version 6 did not say how much of a transaction's gas is state gas, and
 version 7 had no transaction that takes value from accounts that signed for
 it, version 8 priced every calldata byte as non-zero and had no client
-verdict, and version 9 had no stake and no storage association; see the
-version notes at the end.
+verdict, version 9 had no stake and no storage association, and version 10
+put every dependency frame at mode 3; see the version notes at the end.
 
 Every other document in this directory talks about the objects defined here.
 The model keeps exactly the fields a transaction pool reads and drops the rest:
@@ -115,8 +115,8 @@ default: the sum of its frames' `state_gas`, which FEE-4 counts in
 `10-claim-gated-admission.md` carrying `sender`, `nonce_keys` (default
 `(0,)`), `nonce_seq`, `epoch`, `valid` (default true) and `salt` (default
 empty), which only that document's profile reads. A **frame** carries the EIP-8141 fields
-`mode` (0 `DEFAULT`, 1 `VERIFY`, 2 `SENDER`, and 3 for an EIP-8288 dependency
-frame, `05-aggregation.md`), `flags`, `target` (absent means `sender`),
+`mode` (0 `DEFAULT`, 1 `VERIFY`, 2 `SENDER`, and AG-1's `dep_frame_mode`, 3 or
+4, for an EIP-8288 dependency frame, `05-aggregation.md`), `flags`, `target` (absent means `sender`),
 `exec_gas` and `state_gas` (the two `limits`), `value` and `data_size`; for a
 dependency frame, `deps`, the triples its `data` encodes, each as `(scheme,
 data_hash, vk_hash)` with `scheme` an integer and the two hashes strings
@@ -362,3 +362,8 @@ transaction that pays it says so in its frame's `state_gas` and its
   `14-erc-8421.md` reads them (decision record 0061). With every new field
   at its default, a state and a transaction are version 9's, and every
   vector of this document holds and now says version 10.
+
+- **Version 11.** A dependency frame's mode is AG-1's `dep_frame_mode`: 3
+  under `eip-8288`, as before, and 4 under `eip-8288-master` (decision record
+  0063). Under every profile but that one nothing changes, and every vector of
+  this document holds and now says version 11.

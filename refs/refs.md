@@ -183,7 +183,18 @@ says is checked against the primary source before it is relied on.
   EIP-8141 frames at this commit do not have (they carry `limits`), and the
   wrapper limits and "all currently active transactions" cannot both hold.
   Used for `docs/spec/05-aggregation.md`, decision records 0012 and 0013 and
-  experiment 06.
+  experiment 06. Read again in full on 2026-10-20 at master
+  `899bef0ae0f9358f246e6fe833fe580b0564fbb2`, for the profile
+  `eip-8288-master` (decision record 0063): `DEP_VERIFY_FRAME_MODE` is 4;
+  `LEANSTARK_SCHEME` "is reserved: a frame that uses it is invalid until
+  `get_deps_hash` is defined for it", and `get_deps_hash` "is defined for
+  lists of `LEANSPHINCS_SCHEME` dependencies"; "The frame must not be part of
+  an EIP-8141 atomic batch", and its `limits.state` is 0; "A `data_hash` of
+  32 zero bytes stands for the signature hash of the containing
+  transaction"; a mode 1 wrapper's check 5, `deps` the union of its
+  transactions'; `recursive_stark_gas(tx)` added to each transaction's
+  intrinsic gas; and a receipt for the dependency frame. The mempool
+  sections are otherwise as at `258836f9`.
 - **EIP-8209, Commit-Reveal Transaction Frames**, Draft, by Forshtat and
   Nacson, same commit, read 2026-10-08 only for its frame modes: its COMMIT
   frame is "Mode 0x03", the value EIP-8288 gives `DEP_VERIFY_FRAME_MODE`, and
