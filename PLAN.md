@@ -195,7 +195,9 @@ they added; their experiments are not part of this repository.
     and `11-surface.md` version 3 reads the claim from a real transaction
     and checks it before the client is asked (decision record 0058); a
     skandha node does both against the testnet with no configuration.
-    Finished when `base` reaches `main`.
+    *Finished, 2026-10-20:* on `main` through
+    [4w44h9jckz-boop/exp-mempool-l2s#2](https://github.com/4w44h9jckz-boop/exp-mempool-l2s/pull/2),
+    at `10fd022`.
 50. **A self-issuer's junk proofs, and two defences.** Version 4 accepts
     any ticket paymaster, so anyone can issue tickets to themselves, and a
     junk proof costs every node a ticket check, a prefix and a proof while
@@ -204,8 +206,9 @@ they added; their experiments are not part of this repository.
     the attacker's spend and in honest senders' delay? Both are modelled in
     the simulator and neither is specified (decision record 0059); the
     choice between them stays open. *Done on `exp/25-ticket-defences`,
-    2026-10-20:* `experiments/25-ticket-defences/`. Finished when it
-    reaches `main`.
+    2026-10-20:* `experiments/25-ticket-defences/`, in
+    [4w44h9jckz-boop/exp-mempool-l2s#3](https://github.com/4w44h9jckz-boop/exp-mempool-l2s/pull/3).
+    Finished when it reaches `main`.
 
 ### Not started
 
@@ -241,7 +244,9 @@ they added; their experiments are not part of this repository.
     reserved as the EIP marks it.
 48. **The sealed subpool and a key publisher.** `06-lucid.md` as it stands,
     and the key publisher's side: when it releases a key, and what a
-    withheld key leaves behind.
+    withheld key leaves behind. Taken on 2026-10-20 by a second session, on
+    branch `m7-lucid`, merged into `base` when done; it takes decision
+    records 0070 to 0079 and logs in `log/YYYY-MM-DD-m7.md`.
 
 ## Growing the base
 
