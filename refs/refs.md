@@ -661,6 +661,19 @@ says is checked against the primary source before it is relied on.
   issuers and paymaster are `kohaku-rs` (4w44h9jckz-boop/kohaku-rs, `b6a63b1`),
   `crates/frame-ticket/`, `TicketPaymaster.yul` and `src/ticket.rs`. Used for
   CG-8 to CG-10 and decision record 0056.
+- **kohaku-rs** (4w44h9jckz-boop/kohaku-rs, branch
+  `claude/nifty-einstein-llp9cd` at `eea02a3`, read 2026-10-20):
+  `crates/frame-ticket/contracts/TicketPaymaster.hex`, the paymaster's
+  creation code, whose bytes after its 25-byte constructor are the
+  ticket-paymaster template of CG-10, and `TicketPaymaster.yul`, which
+  deploys that runtime followed by the key and a 32-byte denomination;
+  `tests/fixtures/record.json`, experiment 36's re-run under
+  `FRAME_TICKET_V1`, whose four mined tickets verify. The template's code
+  was also read from the testnet: `eth_getCode` of
+  `0x273795f6eb2730d50c3544cbef1e0c1adba4f541` (1,393 bytes) and of the first
+  run's paymaster `0xaac74de2ec4dd90656b7f029610dc9fe2f19ceb4` (1,394 bytes,
+  another runtime), 2026-10-20. Used for CG-10, its vectors and decision
+  record 0057.
 
 Before this repository was published on 2026-10-20, some readings and
 measurements it uses came from research notes and benchmarks that are not

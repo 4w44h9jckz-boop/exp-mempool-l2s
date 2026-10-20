@@ -483,16 +483,10 @@ def _ticket_claim(d: dict) -> TicketClaim:
 def run_claim_ticket(case: dict) -> None:
     """`docs/spec/10-claim-gated-admission.md`, CG-8 to CG-10: a ticket's message, its verdict, and where it rides."""
     if "frames" in case:  # CG-10
-        epoch = int(case["head_epoch"], 16)
-        paymasters, accepted = {}, {}
-        for p in case["paymasters"]:
-            key = bytes.fromhex(p["key"][2:])
-            accepted.setdefault(int(p["epoch"], 16), set()).add(key)
-            if int(p["epoch"], 16) == epoch:
-                paymasters[bytes.fromhex(p["address"][2:])] = key
+        codes = {bytes.fromhex(a[2:]): bytes.fromhex(c[2:]) for a, c in case["codes"].items()}
         frames = [TicketFrame(f["mode"], bytes.fromhex(f["target"][2:]), bytes.fromhex(f["data"][2:]))
                   for f in case["frames"]]
-        found = ticket_carried(_ticket_claim(case["tx"]), frames, paymasters, accepted)
+        found = ticket_carried(_ticket_claim(case["tx"]), frames, codes)
         if found is None:
             got = {"claim": None}
         else:
@@ -505,11 +499,7 @@ def run_claim_ticket(case: dict) -> None:
     m = ticket_message(claim)
     got = {"message": None if m is None else "0x" + m.hex()}
     if "issuer" in case:
-        accepted: dict[int, set[bytes]] = {}
-        for a in case["issuers"]:
-            accepted.setdefault(int(a["epoch"], 16), set()).update(bytes.fromhex(k[2:]) for k in a["keys"])
-        got["valid"] = ticket_valid(claim, bytes.fromhex(case["issuer"][2:]),
-                                    bytes.fromhex(case["signature"][2:]), accepted)
+        got["valid"] = ticket_valid(claim, bytes.fromhex(case["issuer"][2:]), bytes.fromhex(case["signature"][2:]))
     _compare(case["expect"], got, "claim_ticket")
 
 

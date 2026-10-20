@@ -1,9 +1,10 @@
 # 10. Claim-gated admission (proposal)
 
-Version 3, 2026-10-20. Version 1, 2026-10-13, had every node verify;
-version 2, the same day, added `verifies` and CG-7; version 3 adds CG-8 to
-CG-10, the bytes a ticket signs, how a node verifies one and where a
-transaction carries it, and changes nothing else.
+Version 4, 2026-10-20. Version 1, 2026-10-13, had every node verify;
+version 2, the same day, added `verifies` and CG-7; version 3, 2026-10-20,
+added CG-8 to CG-10, the bytes a ticket signs, how a node verifies one and
+where a transaction carries it; version 4, the same day, recognises a
+ticket paymaster by its code rather than from a set a node holds.
 
 **Status: proposal.** This document states, as clauses, an admission policy
 that no client implements and no EIP specifies: claim-gated admission,
@@ -226,17 +227,15 @@ decision record 0056.
 
 **CG-9. A ticket's verification.** A ticket carries a `signature`, 128
 bytes, and names an `issuer` key, 256 bytes (CG-10 says how), beside its
-claim's fields, and a node holds for each epoch a set of issuer keys it
-accepts. The claim is `valid` (MD-6) exactly when:
+claim's fields. The claim is `valid` (MD-6) exactly when:
 
 1. it has a message $m$ (CG-8);
-2. `issuer` is in the node's set for the claim's `epoch`;
-3. `issuer` decodes as a point $\mathit{pk}$ of G2 and `signature` as a
+2. `issuer` decodes as a point $\mathit{pk}$ of G2 and `signature` as a
    point $\sigma$ of G1, each in EIP-2537's encoding (each coordinate in 64
    bytes whose first 16 are zero, below $p$; an element $c_0 + c_1 u$ of
    $\mathbb{F}_{p^2}$ as $c_0$ then $c_1$), on its curve, in its subgroup of
    order $r$, and not the point at infinity;
-4. $e(\sigma, P_2) = e(H(u), \mathit{pk})$, where $P_2$ is G2's generator,
+3. $e(\sigma, P_2) = e(H(u), \mathit{pk})$, where $P_2$ is G2's generator,
    $u$ is the byte 15, the 15 ASCII bytes `FRAME_TICKET_V1`, then $m$, and
    $H$ is hash_to_curve with the suite BLS12381G1_XMD:SHA-256_SSWU_RO_ and
    the domain separation tag `BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_`.
@@ -244,10 +243,10 @@ accepts. The claim is `valid` (MD-6) exactly when:
 **Source:** RFC 9380, sections 5.3.1, 6.6.2, 6.6.3 and 8.8.1, and appendix
 E.2, for $H$; draft-irtf-cfrg-bls-signature-05, sections 2.7 (CoreVerify)
 and 4.2.3 (the ciphersuite BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_, the
-minimal-signature-size variant), for step 4; EIP-2537 at `258836f9`
+minimal-signature-size variant), for step 3; EIP-2537 at `258836f9`
 (Final), "Fine points and encoding of base elements" and "Subgroup
-checks", for step 3's encoding and checks; Commonware
-at `c18a6b9`, whose `ops::verify_message` for `MinSig` is steps 3 and 4
+checks", for step 2's encoding and checks; Commonware
+at `c18a6b9`, whose `ops::verify_message` for `MinSig` is steps 2 and 3
 over its own encoding, with $u$ formed by `union_unique`, the namespace's
 length as a varint, then the namespace, then the message. *Interpretation:*
 signatures are in G1, so each transaction carries one point of G1, and keys
@@ -258,30 +257,49 @@ through `sign_message` for other purposes, but an issuer that signs blind
 signs whatever point it is sent, so an issuer's key signs tickets and
 nothing else. The point at infinity is refused as a signature, as
 Commonware's decoding refuses it; this changes no verdict, since such a
-signature verifies only against a key at infinity, which step 3 refuses
+signature verifies only against a key at infinity, which step 2 refuses
 already, or for a $u$ that hashes to infinity, which nobody can find.
 Decision record 0056.
 
-**CG-10. Where a ticket rides.** A node holds, for each epoch, a set of
-ticket paymasters it accepts, each an address with its issuer key; the
-issuer keys CG-9 accepts for an epoch are those of its ticket paymasters.
-Under `claims`, a frame transaction carries a claim exactly when a frame of
-its validation prefix is a `VERIFY` frame whose target is a ticket
-paymaster the node accepts for the epoch of its head. The first such frame
-is the ticket's. Its data is $\mathrm{be}_{8}(e) \Vert t \Vert \sigma$, 168
-bytes: the claim's `epoch` $e$, its `salt` $t$, and the `signature`
-$\sigma$ in EIP-2537's 128 bytes. The claim's `sender`, `nonce_keys` and
-`nonce_seq` are the transaction's own, its `issuer` is that paymaster's
-key, and it is `valid` by CG-9. Data of any other length makes a claim that
-is not `valid`. **Source:** decision record 0056. *Interpretation:* the
-frame names the key, so a ticket carries no key of its own and a node
-checks one signature, not one for each key it accepts; a ticket paymaster
-holds one key, so a set of issuers is a set of paymasters. The transaction
-names the slot and the chain, so the frame carries only what it does not:
-the epoch, the salt and the signature. A claim is taken only from a
-paymaster the node accepts at its head, so a ticket to any other contract
-is no claim at all and CG-2 judges the transaction without one; decision
-record 0056.
+**CG-10. Where a ticket rides.** A *ticket paymaster* is an account whose
+code at the node's head is $T \Vert K \Vert D$: $T$ the ticket-paymaster
+template, 1,105 bytes whose keccak256 is
+`0xec9f3f855524392a3891f2f2eb554781236d5565520d68388e455be74bdf3fe0`; $K$,
+256 bytes that decode as a point of G2 as CG-9 step 2 decodes `issuer`, on
+the twist, in the subgroup and not the point at infinity; and $D$, any 32
+bytes. Under `claims`, a frame transaction carries a claim exactly when one
+of its frames is a `VERIFY` frame whose target is a ticket paymaster. The
+first such frame is the ticket's. Its data is
+$\mathrm{be}_{8}(e) \Vert t \Vert \sigma$, 168 bytes: the claim's `epoch`
+$e$, its `salt` $t$, and the `signature` $\sigma$ in EIP-2537's 128 bytes.
+The claim's `sender`, `nonce_keys` and `nonce_seq` are the transaction's
+own, its `issuer` is that paymaster's $K$, and it is `valid` by CG-9. Data
+of any other length makes a claim that is not `valid`. **Source:** for
+$T$, `kohaku-rs` at `eea02a3`, `crates/frame-ticket/contracts/TicketPaymaster.hex`
+after its 25-byte constructor, whose `TicketPaymaster.yul` appends the key
+and a 32-byte denomination to the code it deploys; the same bytes are the
+code of `0x273795f6eb2730d50c3544cbef1e0c1adba4f541` on the Hegota testnet.
+*Interpretation:* a node recognises a ticket paymaster by its code, with no
+list and no registry, as the owner ruled; decision record 0057. The frame
+names the key, so a ticket carries no key of its own and a node checks one
+signature; a set of issuers is a set of paymasters. A node can keep a
+paymaster's verdict by its code hash, since the code decides it. A
+transaction names the slot and the chain, so the frame carries only the
+epoch, the salt and the signature. A ticket to any other account is no
+claim at all, and CG-2 judges the transaction without one.
+
+What a junk proof then costs its sender, read from these clauses: anyone
+can deploy the template with a key of their own and sign their own
+tickets. Under CG-3 a mode 0 wrapper's transactions run FP-2 to FP-10 and
+CG-2 before its proofs and FP-11 after them, so a wrapper refused at its
+proof leaves no transaction pending: it holds none of FP-11's pending
+places for its paymaster and reserves none of its balance. FP-8 needs the
+paymaster's balance to cover the transaction's `max_cost`, and spends none
+of it. Each junk proof of a self-issuer therefore costs it a fresh slot and
+a ticket it signs itself, and once, a paymaster's deployment and the float
+for one transaction's `max_cost`; it costs a node CG-9's check, the
+prefix's simulation, the paymaster's `VERIFY` frame included, and the
+proof's verification. Decision record 0057.
 
 ## Not modelled
 
@@ -293,10 +311,12 @@ record 0056.
   ticket. In CG-2 to CG-7 a claim is a record whose `valid` flag is CG-9's
   verdict; how many valid claims an adversary holds is a parameter of an
   experiment.
-- How a node learns the ticket paymasters it accepts for an epoch. CG-10
-  takes the set as given; a paymaster that holds its key in its code from
-  deployment lets a node read the key from the chain, but which paymasters
-  to trust is the node's to decide.
+- How a node reads a target's code: from its execution client at its head,
+  as it takes a verdict (`11-surface.md`, SF-4); the model's clauses take
+  the claim as given (MD-6).
+- A memory of the paymasters under whose tickets a proof failed, which would
+  price a self-issuer's junk proofs in deployments (CG-10); `claim_memory`
+  has no such value.
 - What a ticket paymaster's `VERIFY` frame costs, and how many of its
   transactions a pool holds at once. A paymaster that checks a ticket on
   EIP-2537's precompiles spent 122,006 gas in its frame on the Hegota
@@ -326,3 +346,8 @@ record 0056.
   signature over them, and the frame that carries it to a ticket paymaster.
   Nothing in CG-1 to CG-7 changes: every vector of version 2 holds unchanged
   and now says version 3.
+- **Version 4.** A ticket paymaster is an account whose code is the
+  template followed by a key and 32 bytes (CG-10), so CG-9 loses its step
+  2, the node's set of keys for each epoch, and its steps 3 and 4 become 2
+  and 3. CG-9's and CG-10's vectors change with it; the vectors of CG-2 to
+  CG-8 hold unchanged and now say version 4.
