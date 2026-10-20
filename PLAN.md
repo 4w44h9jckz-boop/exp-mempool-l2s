@@ -21,12 +21,12 @@ its own `exp/NN-name`.
 
 | Part | State |
 | --- | --- |
-| `docs/spec/00-model.md` | Version 10. Accounts, heads, transactions, pool interface with `finalize`, fee and gas formulas; FEE-4 prices EIP-8250's nonce fields (decision record 0006); MD-6 has EIP-8288's dependency frames and an admission claim; MD-11 holds a sender in one of three subpools; MD-5's authorizations may carry their nonce (decision record 0031); MD-5 and MD-6 carry the EIP-8037 state gas a transaction uses (decision record 0043); MD-5's transaction can pull value from accounts that signed for it and pay it on, as ERC-3009's `receiveWithAuthorization` does, and declares the gas it uses if it reverts (decision record 0045); MD-6's frame transaction counts its zero calldata bytes, which FEE-4 prices at one token, and may carry a client's verdict on its prefix, which `reset` renews (decision record 0051); since version 10 an account carries the stake ERC-8421's registry reports, and a frame's reads and writes the address a tracer finds a slot associated with (decision record 0061) |
+| `docs/spec/00-model.md` | Version 11. Accounts, heads, transactions, pool interface with `finalize`, fee and gas formulas; FEE-4 prices EIP-8250's nonce fields (decision record 0006); MD-6 has EIP-8288's dependency frames and an admission claim; MD-11 holds a sender in one of three subpools; MD-5's authorizations may carry their nonce (decision record 0031); MD-5 and MD-6 carry the EIP-8037 state gas a transaction uses (decision record 0043); MD-5's transaction can pull value from accounts that signed for it and pay it on, as ERC-3009's `receiveWithAuthorization` does, and declares the gas it uses if it reverts (decision record 0045); MD-6's frame transaction counts its zero calldata bytes, which FEE-4 prices at one token, and may carry a client's verdict on its prefix, which `reset` renews (decision record 0051); since version 10 an account carries the stake ERC-8421's registry reports, and a frame's reads and writes the address a tracer finds a slot associated with (decision record 0061); since version 11 a dependency frame's mode is AG-1's (decision record 0063) |
 | `docs/spec/01-nonce-pool.md` | Version 1. go-ethereum `legacypool` at `93d78a01`, 20 clauses |
 | `docs/spec/02-frame-pool.md` | Version 7. EIP-8141 public mempool at `258836f9` with EIP-8250, 16 clauses, profiles `eip-8141` and `hegota-testnet`, a `reuse_balance` variant of FP-15 (decision record 0009), an `evict_first` variant of FP-14 (decision record 0010), an `expiry_margin` variant of FP-8 and FP-15 (decision record 0011) and a `static_first` variant that checks FP-11 and FP-12 before the prefix (decision record 0020); FP-8 and FP-9 take a client's verdict where a transaction carries one, and FP-15 counts a new verdict as a changed dependency (decision record 0051); `hegota-testnet` takes `08-recent-roots.md`'s recent roots (decision record 0053) |
 | `docs/spec/03-block-building.md` | Version 4. go-ethereum miner ordering and the model's state transition, which checks each EIP-7702 authorization against its authority's code and nonce (decision record 0031), and BB-6, EIP-8037's two gas dimensions as the rule `two`, each envelope reserving as its EIP says (decision record 0043); a transaction whose execution reverts is included and pays for the gas it used, as go-ethereum does, and BB-7 adds builders that drop what would revert (decision record 0045) |
 | `docs/spec/04-matcha.md` | Version 3, a proposal. MATCHA's width on top of the frame pool, 14 clauses, profile `matcha` (decision record 0007), the post's optional load floor, off in the profile (decision record 0022), and a baseline per contention class, one a sender in the profile, with `storage` and `slot` as the readings of reply #2's question (decision record 0026) |
-| `docs/spec/05-aggregation.md` | Version 3. EIP-8288 at `258836f9` on top of the frame pool, 10 clauses, profile `eip-8288` with `cap_aggregates` and `forward_wrappers` for the readings the text leaves open (decision record 0012), AG-9's proving time of an aggregate under a budget, unset in the profile with its four costs at 0 (decision record 0034), and AG-10's memory of an aggregate under a budget, unset likewise (decision record 0042) |
+| `docs/spec/05-aggregation.md` | Version 4. EIP-8288 at `258836f9` on top of the frame pool, 10 clauses, profile `eip-8288` with `cap_aggregates` and `forward_wrappers` for the readings the text leaves open (decision record 0012), AG-9's proving time of an aggregate under a budget, unset in the profile with its four costs at 0 (decision record 0034), and AG-10's memory of an aggregate under a budget, unset likewise (decision record 0042); since version 4 a second profile, `eip-8288-master`, the EIP at master `899bef0a` with leanSTARK reserved, a dependency frame of mode 4 outside an atomic batch, a zero `data_hash` for the signature hash and mode 1's union checked (decision record 0063) |
 | `docs/spec/06-lucid.md` | Version 2. EIP-8184 at `258836f9` as a sealed subpool and two builder steps, 13 clauses, profile `eip-8184` with the admission `policy` left open (decision record 0014) and an `evict_first` variant (decision record 0015); a decrypted transaction executes its pulls and pays, and reverts, as BB-5 says (decision record 0045) |
 | `docs/spec/07-focil.md` | Version 2. EIP-7805 at `258836f9` as a constraint on the builder, with EIP-8369's profiles for what can be enforced, 8 clauses, profiles `eip-7805` and `eip-8369` and a `policy` variant for what an includer lists first (decision record 0018); since version 2 the budget fill per list or per payload, with the profile `ethrex`, the order delivered as an input, and validity at a node without the post-state as a verdict (decision record 0055) |
 | `docs/spec/08-recent-roots.md` | Version 2. EIP-8272 at `258836f9` on top of the frame pool, 8 clauses, profile `eip-8272`, with `RECENT_ROOT_CODE`, which the EIP leaves unset, a named string, and the margin a node keeps as `root_margin`, 0 in the profile (decision record 0023); since version 2 `hegota-testnet` too, at the testnet's constants, and a transaction with a client's verdict keeps its root expiry (decision record 0053) |
@@ -241,6 +241,17 @@ they added; their experiments are not part of this repository.
     admitted under it, and a fresh sender is asked for nothing the frame
     pool does not ask (AM-16); skandha plays every vector of it. Item 52
     prices its stake and reputation as a defence.
+47. **The aggregator.** AG-5 and AG-7 to AG-9 as testable clauses for the
+    schemes EIP-8288 defines, its hash-based signatures, with the STARK scheme
+    reserved as the EIP marks it. *Done on `base`, 2026-10-20:*
+    `docs/spec/05-aggregation.md` version 4 reads EIP-8288 again at master
+    `899bef0a` as a second profile, `eip-8288-master`, beside the pinned
+    one, with leanSTARK reserved (decision record 0063), at `2df1fa0`; five
+    vector files under it. skandha's aggregator plays every AG-7, AG-9 and
+    AG-10 vector, and two of its pools, each with an aggregator, fold the
+    same leanSPHINCS dependencies and each accept the other's fold, also
+    after a block drops two of them. Two running nodes cannot exchange a
+    fold until the EIP chooses `AGGREGATED_VK` and `DEPS_HASH`.
 
 ### Not started
 
@@ -269,9 +280,6 @@ they added; their experiments are not part of this repository.
 41. **Conclusions on more than one seed.** Every experiment runs one seed;
     Commonware's runtime runs about ten in each CI run (decision record
     0049).
-47. **The aggregator.** AG-5 and AG-7 to AG-9 as testable clauses for the
-    schemes EIP-8288 defines, its hash-based signatures, with the STARK scheme
-    reserved as the EIP marks it.
 48. **The sealed subpool and a key publisher.** `06-lucid.md` as it stands,
     and the key publisher's side: when it releases a key, and what a
     withheld key leaves behind. Taken on 2026-10-20 by a second session, on
