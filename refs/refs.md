@@ -681,7 +681,16 @@ says is checked against the primary source before it is relied on.
   `0x75728` (`eth_getBlockByNumber`: timestamp 1792484503, base fee 7, slot
   510342) and the paymaster's balance there (`eth_getBalance`,
   4016411986114884 wei), read 2026-10-20. Used for SF-3 and SF-4 version 3
-  and decision record 0058.
+  and decision record 0058. For experiment 25 and decision record 0059:
+  `TicketPaymaster.yul`'s header ("There is no withdrawal: the float leaves
+  only as gas this contract approves"; a call with value buys value over
+  the denomination tickets, so a ticket costs the denomination, $10^{15}$
+  wei in the run); the record's `payVerify.gasUsed`, 122,006, the
+  paymaster's `VERIFY` frame; and `eth_estimateGas` of the record's
+  deployment, its 1,418 bytes of creation code and key through the
+  deterministic deployment proxy `0x4e59b44847b379578588920ca78fbf26c0b4956c`
+  under a fresh salt, at block 482,799 of the testnet: 2,443,085 gas, read
+  2026-10-20.
 
 Before this repository was published on 2026-10-20, some readings and
 measurements it uses came from research notes and benchmarks that are not
