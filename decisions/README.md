@@ -63,3 +63,4 @@ and says so.
 | [0056](0056-a-ticket-is-a-bls12-381-signature-in-g1-over-a-fixed-message-verified-as-commonware-verifies.md) | A ticket is a BLS12-381 signature in G1 over a fixed message, verified as Commonware verifies |
 | [0057](0057-a-ticket-paymaster-is-recognised-by-its-code-and-a-self-issuer-pays-for-junk-proofs-only-once.md) | A ticket paymaster is recognised by its code, and a self-issuer pays for junk proofs only once |
 | [0058](0058-the-surface-reads-a-paymasters-code-from-the-client-and-checks-a-claim-before-asking-about-the-prefix.md) | The surface reads a paymaster's code from the client, and checks a claim before asking about the prefix |
+| [0059](0059-two-defences-against-a-self-issuers-junk-proofs-are-modelled-in-the-simulator-not-specified.md) | Two defences against a self-issuer's junk proofs are modelled in the simulator, not specified |

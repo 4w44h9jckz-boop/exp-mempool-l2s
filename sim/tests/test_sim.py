@@ -13,6 +13,7 @@ from emem_sim import (BumpLoad, ChainConfig, Clearing, Committee, CopiesLoad, Fa
                       ShuffleRounds, Simulation, SponsoredLoad, Spend,
                       SybilLoad, Tickets, TransferLoad, Updater, Upgrade, WalletLoad, backed_tx, bump_fees, fixed, one_of, uniform)
 from emem_sim.batch import MEASURED, SINGLE_MS, batch_ms, verify
+from emem_sim.issuers import Defence, Issuers, JunkProofs, guard
 from emem_sim.network import INFLATED, budget
 
 
@@ -1501,6 +1502,79 @@ def congested(patience=None, reprice=False, limit=None, spend=None, seed=3, ever
 
 def landed_any(sim, versions):
     return any(sim.recorder.txs[v.hash].included_at is not None for v in versions)
+
+
+class TestIssuers(unittest.TestCase):
+    """Ticket issuers, and the two defences modelled around CG-2 and CG-4 (decision record 0059)."""
+
+    GATED = CLAIM_GATED.with_(cap_aggregates=False)
+    PAYERS = {f"x{i}": 10**20 for i in range(4)} | {"h": 10**20}
+
+    def guarded(self, defence, *junk, run=300):
+        registry = Issuers(lambda s: "h" if s.startswith("d") else None)
+        loads, guards = [], {}
+
+        def before(sim):
+            guards.update(guard(sim, lambda name: defence, registry))
+            for kwargs in junk:
+                loads.append(JunkProofs(registry=registry, **kwargs))
+                sim.add_load(loads[-1])
+
+        sim, wallets, rec = aggregating(self.GATED, claims=True, accounts=self.PAYERS, run=run, before=before)
+        counts = Counter()
+        for g in guards.values():
+            counts.update(g.counts)
+        return sim, wallets, rec, loads, guards, counts
+
+    def test_without_a_defence_every_junk_proof_costs_every_node_a_ticket_a_prefix_and_a_proof(self):
+        sim, wallets, rec, (x,), _, counts = self.guarded(
+            Defence(), dict(name="x", issuers=["x0"], count=1, every=12, start=60, stop=240))
+        self.assertEqual(x.answers, Counter({"ErrWrapperProof": x.sent}))
+        self.assertEqual(x.sent, 15 * len(sim.net.nodes))
+        self.assertEqual(x.tickets, 15)
+        self.assertEqual(counts["ticket", "x"], x.sent)
+        self.assertEqual(counts["prefix", "x"], x.sent)
+        self.assertEqual(work(sim, origin="x", event="proof"), x.sent)
+        self.assertTrue(all(rec.txs[tx.hash].included_at is not None for tx in wallets.txs))
+
+    def test_issuer_memory_closes_an_issuer_after_k_failures_until_the_epoch_ends(self):
+        sim, _, _, (x,), guards, counts = self.guarded(
+            Defence(memory=2), dict(name="x", issuers=["x0"], count=1, every=12, start=60, stop=480), run=500)
+        nodes = len(sim.net.nodes)
+        # two failures a node in each of epochs 0 and 1, the rest refused before the ticket is checked
+        self.assertEqual(work(sim, origin="x", event="proof"), 4 * nodes)
+        self.assertEqual(x.answers["ErrWrapperProof"], 4 * nodes)
+        self.assertEqual(x.answers["ErrIssuerRefused"], x.sent - 4 * nodes)
+        self.assertEqual(counts["ticket", "x"], 4 * nodes)
+        self.assertEqual(counts["refused", "x"], x.sent - 4 * nodes)
+        for g in guards.values():
+            self.assertEqual(sorted(g.closed), [("x0", 0), ("x0", 1)])
+
+    def test_a_self_issuer_with_more_issuers_gets_k_proofs_from_each_every_epoch(self):
+        sim, _, _, (x,), _, _ = self.guarded(
+            Defence(memory=1), dict(name="x", issuers=["x0", "x1", "x2"], count=1, every=12, start=60, stop=480,
+                                    rotate=True), run=500)
+        nodes = len(sim.net.nodes)
+        self.assertEqual(x.used, {"x0", "x1", "x2"})
+        self.assertEqual(work(sim, origin="x", event="proof"), 2 * 3 * nodes)  # epochs 0 and 1
+
+    def test_issuer_memory_lets_a_holder_of_honest_tickets_close_an_honest_issuer(self):
+        sim, wallets, rec, (g,), guards, counts = self.guarded(
+            Defence(memory=1), dict(name="g", issuers=["h"], count=1, every=384, offset=100, start=60), run=500)
+        self.assertEqual(g.tickets, 2)  # one in each epoch it ran in
+        self.assertGreater(counts["refused", "d"], 0)
+        refused = Counter(a for answers in wallets.answers.values() for a in answers)
+        self.assertGreater(refused["ErrIssuerRefused"], 0)
+        for gd in guards.values():
+            self.assertIn(("h", 0), gd.closed)
+
+    def test_a_node_list_refuses_an_unlisted_issuer_before_any_check(self):
+        sim, wallets, rec, (x,), _, counts = self.guarded(
+            Defence(listed=frozenset({"h"})), dict(name="x", issuers=["x0"], count=1, every=12, start=60, stop=240))
+        self.assertEqual(x.answers, Counter({"ErrIssuerUnlisted": x.sent}))
+        self.assertEqual(counts["ticket", "x"] + counts["prefix", "x"], 0)
+        self.assertEqual(work(sim, origin="x", event="proof"), 0)
+        self.assertTrue(all(rec.txs[tx.hash].included_at is not None for tx in wallets.txs))
 
 
 class TestBumping(unittest.TestCase):
