@@ -46,7 +46,7 @@ One JSON object per file, named after the clause (`np-11-replacement.json`):
 | `also` | optional: other clauses the cases also bind, from any document |
 | `document` | the file under `docs/spec/` |
 | `version` | the document version the vector was written against |
-| `operation` | `pool`, `next_base_fee`, `intrinsic_gas`, `frame_gas`, `ticket_fee`, `surface` or `replay` |
+| `operation` | `pool`, `next_base_fee`, `intrinsic_gas`, `frame_gas`, `ticket_fee`, `surface`, `replay`, `claim_ticket` or `key_round` |
 | `distinguishes` | one sentence: what a failure here would mean |
 | `cases` | a list of cases |
 
@@ -62,6 +62,31 @@ in its document, and every clause marked normative has at least one vector.
   `max_gas` and `max_cost`, FEE-4.
 - `ticket_fee`: each case has `st`, `base_fee` and `expect` with `can_pay` and
   `cost`, and, if it can pay, `priority`, `tob` and `ticket_fee`, LU-3.
+
+### The `key_round` operation
+
+A case plays the key round of `docs/spec/06-lucid.md` (LU-14 to LU-19) over
+one scheduling block. Case keys: `chain_id`, the chain's, 1 by default, and
+`block`, with `root` (`B`), `slot` (1), `gas_limit` (30000000), `attested`
+(true) and `commitments`, the sealed transactions LU-12 committed, in
+commitment order, as LU-2 objects with the defaults below (`type` may be
+left out). Keys are `0x` and 64 hexadecimal digits. A commitment is named
+by its `label`, which stands for its `commitment_root`, since a reader
+cannot compute the model's hash by hand.
+
+| Step | Does |
+| --- | --- |
+| `{"commitments": {}, "expect": [{"root": label, "key": k, "gas_obligation": g, "executable": []}, ...]}` | LU-14: the block's commitments, in order |
+| `{"release": {"publisher": p, "observed": o}, "expect": [label, ...]}` | LU-16: the commitments whose key message `p` may release, in order, having observed the block (`o`, true by default); each released message is named by its commitment's label for later steps |
+| `{"message": m, "as": name, "expect": reason, "expect_read": r}` | LU-15: `m` is a key message, or the name of one; the reason is `valid` or the first check that applies; `expect_read`, optional, whether step 6 read the ciphertext; `as`, optional, names the message for later steps |
+| `{"vote": {"deadline": d, "received": [[name, at], ...]}, "expect": [bit, ...], "expect_read": [label, ...]}` | LU-17: a member's `keys_observed` from the messages it received and when, and the commitments whose ciphertext it read, in commitment order |
+| `{"tally": {"ptc": [member, ...], "vote_deadline": v, "attestation": a, "votes": [[member, [bit, ...], at], ...]}, "expect": [[treatment, ...], ...], "expect_counts": [{"t1": .., "t0": .., "l1": .., "l0": .., "e": ..}, ...]}` | LU-18: for each commitment, the treatments allowed, sorted (`missing`, `observed`); `expect_counts`, optional, the counts behind them |
+| `{"blame": {"deadline": d, "received": [[name, at], ...]}, "expect": {"revealed": [label, ...], "missing": {label: outcome, ...}}}` | LU-19, after a `tally` step: the commitments that are revealed, in order, and for each treated as missing, `undecryptable`, `late`, `withheld` or `unvoted`, on the record of the messages received |
+
+A key message is `{"chain_id": c, "root": r, "slot": s, "commit_index": j,
+"k_dems": [k, ...]}`; `chain_id`, `root` and `slot` default to the case's
+and its block's, `commit_index` to 0, and `k_dems` to the one key, `k_dem`,
+of the commitment at `commit_index`, or 32 zero bytes if there is none.
 
 ### The `surface` operation
 
@@ -175,7 +200,8 @@ So that a vector shows only what it is about, every field has a default:
   `max_preceding` 31, `key_publisher` and `fee_recipient` `kp`, `key_fee` 0,
   `size` 512, `signature_id` 1, `valid_signature`, `ciphertext_ok` and
   `revealed` true, `used` equal to `gas_limit`, no `to`, `pulls` and `pays`
-  empty, `atomic` true and `revert_used` equal to `used`; its cost is
+  empty, `atomic` true and `revert_used` equal to `used`, `k_dem` 32 zero
+  bytes, `key_commitment` its keccak256 and `decrypts` true; its cost is
   10000000;
 - frame: `flags` 0, no `target`, `exec_gas` 0, `state_gas` 0, `value` 0,
   `data_size` 0, no `approves`, `reverts` false, empty `opcodes`, `reads`,

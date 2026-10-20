@@ -64,3 +64,4 @@ and says so.
 | [0057](0057-a-ticket-paymaster-is-recognised-by-its-code-and-a-self-issuer-pays-for-junk-proofs-only-once.md) | A ticket paymaster is recognised by its code, and a self-issuer pays for junk proofs only once |
 | [0058](0058-the-surface-reads-a-paymasters-code-from-the-client-and-checks-a-claim-before-asking-about-the-prefix.md) | The surface reads a paymaster's code from the client, and checks a claim before asking about the prefix |
 | [0059](0059-two-defences-against-a-self-issuers-junk-proofs-are-modelled-in-the-simulator-not-specified.md) | Two defences against a self-issuer's junk proofs are modelled in the simulator, not specified |
+| [0070](0070-the-key-round-is-specified-from-the-eips-text-with-real-keys-and-decryption-as-a-field.md) | The key round is specified from the EIP's text, with real keys and decryption as a field |

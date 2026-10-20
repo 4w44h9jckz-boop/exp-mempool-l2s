@@ -1,18 +1,21 @@
 # 06. Sealed transactions (LUCID, EIP-8184)
 
-Version 2, 2026-10-13. Version 1 ran nothing of a decrypted transaction
-but its gas; see the version notes at the end.
+Version 3, 2026-10-20. Version 2 left out the key round: the
+commitment, the key message, its release and the committee's vote on it;
+see the version notes at the end.
 
 The mempool side of EIP-8184, *LUCID encrypted mempool*, written down as a
 third subpool beside the account-nonce pool and the frame pool, with what a
 builder commits and what the next block executes. The EIP is Draft; it was
 read from ethereum/EIPs at commit `258836f9` (2026-10-07), sections
 "Constants and parameters", "Overview", "Sealed transactions", "Extended
-payload bid with ST-commitments", "Execution payload expansion", "Block
-processing", "Rationale" ("Key publisher liability for non-reveal") and
-"Security Considerations". Quotations below are from those sections unless
-another is named. A clause marked *Interpretation* is this repository's
-reading where the EIP leaves a choice open, and names decision record 0014.
+payload bid with ST-commitments", "Execution payload expansion", "Key
+message", "Key release", "Key timeliness", "Block processing", "Rationale"
+("Key publisher liability for non-reveal") and "Security Considerations";
+it is byte-identical at master `ed9b7126` (2026-10-20). Quotations below
+are from those sections unless another is named. A clause marked
+*Interpretation* is this repository's reading where the EIP leaves a
+choice open, and names decision record 0014, or 0070 for the key round.
 
 A sealed transaction (ST) is a signed **ticket**, which pays and consumes its
 sender's nonce, and a ciphertext that decrypts to the transaction to run. A
@@ -20,8 +23,11 @@ builder commits to STs in block $n$, in an order the protocol fixes by the
 **ToB fee** each pays; the tickets are charged in block $n$; a key publisher
 releases the keys once the commitment is safe; and the decrypted
 transactions run at the top of block $n+1$, which refunds the unused gas and
-most of the ToB fee to a sender whose key arrived. What it is for, and the
-two-slot pipeline step by step, is not restated here.
+most of the ToB fee to a sender whose key arrived. Between the two blocks,
+the key round (LU-14 to LU-19) makes three facts public without the
+content: what was committed, whether its key came by the deadline, and
+the committee's vote on it. What it is for, and the two-slot pipeline step
+by step, is not restated here.
 
 The EIP leaves the pool's admission policy open: "The mempool must naturally
 protect against spam and reject STs that have no chance of getting included"
@@ -96,22 +102,27 @@ by decrypting it or by waiting for its key:
 | `signature_id` | the only valid value is `EC_DSA_TYPE`, 1 |
 | `valid_signature` | false models a signature from which no sender can be recovered |
 | `ciphertext_ok` | whether `keccak256(ciphertext_envelope)` equals `ciphertext_hash` |
-| `revealed` | whether a valid key message for it is released in time and decrypts it (LU-13) |
+| `revealed` | whether a valid key message for it is released in time and decrypts it (LU-13, LU-19) |
+| `k_dem` | the DEM key, 32 bytes, that a key message for it releases (LU-15); default 32 zero bytes |
+| `key_commitment` | the ticket's `key_commitment`; default `keccak256(k_dem)` |
+| `decrypts` | whether its ciphertext, decrypted with `k_dem`, yields a plaintext that matches `reveal_commitment`, with both fees 0 and the ticket's `gas_limit` (LU-15); default true |
 | `used` | the plaintext transaction's `dual_gas_used` if revealed; default `gas_limit` |
 | `to`, `pulls`, `pays`, `atomic` | the plaintext transaction's recipient, and what its execution pulls and pays, as MD-5's; default no recipient and nothing pulled or paid |
 | `revert_used` | the plaintext transaction's `dual_gas_used` if its execution reverts (LU-13); default `used` |
 | `label` | as MD-5's |
 
 Its hash is MD-7's over every field; the model takes it as both the ST's
-hash and its `ticket_hash`, which orders commitments (LU-6). **Source:**
-EIP-8184, Sealed transactions, ST ticket, Ciphertext envelope, Key message
-validity and decryption.
+hash and its `ticket_hash`, which orders commitments (LU-6). `k_dem`,
+`key_commitment` and `decrypts` enter the hash only when they differ from
+their defaults. **Source:** EIP-8184, Sealed transactions, ST ticket,
+Ciphertext envelope, Key message validity and decryption.
 
 *Not modelled:* the plaintext transaction's other fields and effects, beyond
 the gas it uses and the value it pulls and pays, and its sender, which can
-differ from the ticket's sender; the ciphertext,
-the key and the DEM; bundles, their `executable` bitfield and their key
-publisher's signature.
+differ from the ticket's sender; the ciphertext, the DEM and
+`reveal_commitment`, of which only whether they agree is kept, as
+`decrypts`; bundles, their `executable` bitfield and their key publisher's
+signature.
 
 **LU-3. The ticket's fee.** With $G$ the gas limit, $b$ a base fee per gas
 and $k$ the key fee, an ST **can pay** at $b$ if
@@ -284,7 +295,8 @@ $b_n (G - u) + \lfloor \mathit{tob} \cdot (F - 1) / F \rfloor$,
 with $b_n$ block $n$'s base fee, $\mathit{tob}$ the ToB fee it paid and $F$
 `tob_fee_fraction`, and its `fee_recipient` receives its key fee. A
 commitment that is not revealed executes nothing and returns nothing. The
-regular transactions of BB-3 have the gas left. **Source:** EIP-8184, Block
+regular transactions of BB-3 have the gas left. A commitment is `revealed`
+as LU-19 says, from the key round between the two blocks. **Source:** EIP-8184, Block
 processing ("The PT is then executed as a regular transaction, except that
 it bypasses the ordinary EIP-1559 fee-cap validation and no gas fee is
 charged", and "The unused gas, previously charged to the `parent_ticket`
@@ -297,14 +309,161 @@ protection, that the public path cannot replicate"), so a decrypted
 transaction that reverts is executed and pays for its gas, and BB-7 does
 not drop it.
 
+## The key round
+
+Between block $n$, which commits, and block $n+1$, which executes, the key
+round runs on four public objects: the commitments in block $n$'s bid, the
+key messages, the votes of slot $n$'s payload timeliness committee (PTC),
+and the times each was received. None of them is the plaintext.
+
+**LU-14. Commitments.** Block $n$'s commitments are the sealed
+transactions LU-12 commits, in commitment order, indexed from 0. The
+commitment of a sealed transaction with index $j$ is
+
+| Field | Value |
+| --- | --- |
+| `commitment_root` | its hash, the model's `ticket_hash` (LU-2) |
+| `commitment_key` | its `key_commitment` |
+| `gas_obligation` | its `gas_limit` |
+| `executable` | empty |
+
+Each field is read from the ticket alone. The block that carries them is
+the **scheduling block**, named by its `root` and `slot`. **Source:**
+EIP-8184, Extended payload bid with ST-commitments ("For a non-bundle
+commitment, `executable` is empty and `gas_obligation =
+ticket.gas_limit`", and "For STs, the `commitment_key` is the ticket's
+`key_commitment`").
+
+**LU-15. A key message.** A key message carries `chain_id`, `root` and
+`slot`, naming a scheduling block, `commit_index` and `k_dems`, a list of
+32-byte keys. A node holding scheduling blocks finds it valid unless the
+first of these applies, which is the reason it is not:
+
+1. `chain`: `chain_id` is not the chain's;
+2. `block`: it holds no scheduling block with that `root` and `slot`;
+3. `index`: `commit_index` is not below that block's number of
+   commitments;
+4. `length`: `k_dems` does not have exactly one key;
+5. `key`: $\mathrm{keccak256}(k_{dems}[0])$ is not the commitment's
+   `commitment_key`;
+6. `decrypt`: the committed sealed transaction does not decrypt (`decrypts`
+   false).
+
+Steps 1 to 5 read the message and the scheduling block. Step 6 is the only
+one that reads the ciphertext, and only a message that has passed step 5,
+so has released the committed key, reaches it. **Source:** EIP-8184, Key
+message, and Key message validity and decryption (its conditions 1 to 5,
+for a non-bundle ST). *Interpretation:* the order, the public checks
+before the one that reads the ciphertext, and the reasons' names, which
+the EIP does not give; the set of valid messages is the same in any
+order; decision record 0070.
+
+**LU-16. Key release.** A key publisher $P$ MAY release the key message
+$(\mathit{chain\_id}, \mathit{root}, \mathit{slot}, j, [k_{dem}])$ for
+commitment $j$ of a scheduling block it has observed if and only if:
+
+1. $P$ is the commitment's `key_publisher`, or its `sender`;
+2. the block's `gas_obligation`s sum to at most its ToB segment,
+   $\lfloor L / \mathit{tob\_gas\_fraction\_denominator} \rfloor$ for the
+   block's gas limit $L$;
+3. $j$ is at most the commitment's `max_preceding`;
+4. the block is `attested`.
+
+Before $P$ has observed the block it releases nothing, so no key message
+can name a commitment that does not yet exist. A publisher that may
+release and does not is **withholding**; that is a behaviour, not a rule
+(LU-19). **Source:** EIP-8184, Key release ("It verifies that ... the
+aggregate of all `gas_obligation` entries is within the `tob_gas_limit`",
+"The key publisher further verifies that the order of the ST-commitment is
+consistent with its underlying `max_preceding_commitments`. When the key
+publisher is confident that the beacon block will become canonical (for
+example after observing attestations for it), it releases its
+`LucidKeyMessage`. In the case of a single ST, the sender may itself also
+release the `LucidKeyMessage`"). *Interpretation:* confidence that the
+block becomes canonical is the input `attested`, and consistency with
+`max_preceding` is $j \le \mathit{max\_preceding}$, the count of
+commitments before it; decision record 0070.
+
+**LU-17. A vote.** A member of slot $n$'s PTC with key observation deadline
+$D$ votes `keys_observed`, with one bit per commitment of the scheduling
+block: bit $j$ is 1 if and only if it received, at a time at or before
+$D$, a key message for that block with `commit_index` $j$ that is valid
+(LU-15). A message received after $D$ sets nothing. **Source:** EIP-8184,
+Key timeliness ("A bit `keys_observed[j]` is set to 1 iff the voter
+observed, by the key observation deadline of the PTC, a valid
+`LucidKeyMessage` for `(scheduling_beacon_block_root, scheduling_slot,
+commit_index=j)`"). *Interpretation:* the bitfield's length is the
+number of commitments, within the EIP's bound `MAX_ST_COMMITS`; $D$ is an
+input, since the EIP gives it no value; decision record 0070.
+
+**LU-18. The tally.** The PTC of slot $n+1$ tallies slot $n$'s votes on a
+scheduling block, given the committee's members, the vote deadline $V$
+(`lucid_key_vote_deadline`) and its attestation time $A \ge V$. A vote from
+a validator outside the committee, or received after $A$, is ignored. A
+member from which two distinct votes were received by $A$ is
+**equivocated**, and none of its votes is counted below; $e$ is the number
+of equivocated members. Of the rest, a member's vote is **timely** if
+first received at or before $V$ and **late** otherwise. A vote whose
+bitfield's length is not the block's number of commitments is ignored. For commitment $j$, with
+$t_1$ and $t_0$ the timely votes with bit $j$ 1 and 0, and $l_1$ and $l_0$
+the late ones,
+
+- the key **may be treated as missing** if $2 t_1 \le t_1 + t_0 + l_0 + e$;
+- the key **may be treated as observed** if
+  $2 (t_1 + l_1 + e) > t_1 + t_0 + l_1 + e$.
+
+At least one of the two holds. A payload of block $n+1$ that treats a key
+in a way the tally does not allow is voted untimely by the PTC of slot
+$n+1$. **Source:** EIP-8184, Key timeliness (the definitions of
+`timely_1`, `timely_0`, `late_1`, `late_0` and `equivocated_votes`, the two
+conditions, and "If this test fails for any key, the PTC of the next slot
+votes against the payload timeliness"). *Interpretation:* "keep listening
+for new messages and equivocation until they vote" is read as equivocation
+seen by $A$; $V$ and $A$ are inputs; decision record 0070.
+
+**LU-19. Revealed, and a missing key.** Commitment $j$ is `revealed`
+(LU-13) if and only if block $n+1$'s builder treats its key as observed
+and its sealed transaction `decrypts`. A builder MUST treat a key only as
+LU-18 allows; where both are allowed the reference's builder treats it as
+observed. For a commitment whose key is treated as missing, the public
+record, the scheduling block, the key messages with their times and the
+votes, says which of these happened:
+
+- `undecryptable`: a key message for it that passes LU-15's steps 1 to 5
+  was received by $D$, and the ciphertext does not decrypt: the sender's
+  ciphertext;
+- `late`: such a message was received only after $D$;
+- `withheld`: no such message was received: its `key_publisher`, or its
+  `sender`, released nothing;
+- `unvoted`: a valid key message for it was received by $D$: the record
+  shows the key in time and the committee's vote against it.
+
+The outcome is the first of these that applies, in this order, and is
+judged from the record its reader holds; a member of slot $n$'s PTC that
+voted on its own record never finds `unvoted`. The votes alone tell
+`withheld` and `late` from a key that came in time, but not from
+`undecryptable`; the key message does. **Source:** EIP-8184,
+Block processing ("with STs not decrypted left out from the
+`decrypted_transactions` list") and Rationale, Key publisher liability for
+non-reveal ("There is no protocol-level mechanism for having key
+publishers of multi-key bundles assume liability"). *Interpretation:*
+the builder's choice where both are allowed, and the four outcomes, which
+attribute and do not penalise; decision record 0070.
+
 ## Not modelled
 
 - Inclusion lists and their enforcement (EIP-7805), `tob_gas_limit_per_il`,
   and which inclusion-list entries a block must take.
 - Bundles, their `executable` bitfield, `gas_obligation`, `commitment_key`
   and key publisher signature.
-- The payload bid, key messages, key-timeliness votes and the PTC; whether a
-  key is released is the field `revealed`.
+- The payload bid's other fields and the beacon block; a vote's BLS
+  signature and its domain; how the PTC is chosen and its size; the
+  availability of the sealed transactions' bytes and the payload
+  timeliness vote on them; view-merge, the Rationale's alternative to a
+  separate vote on keys. A vector or a simulation gives the committee, the
+  times and `attested`.
+- The DEM, ChaCha20-Poly1305 and `reveal_commitment`'s `hash_tree_root`:
+  whether a released key decrypts its ciphertext is the field `decrypts`.
 - Recovery under a rejected payload, the same-slot variant and the frame
   transaction integration (Rationale, Alternative specifications).
 - What the decrypted transaction does beyond its gas, pulls and pays, the header it is
@@ -323,3 +482,10 @@ not drop it.
   transaction as under version 1, so every vector of this document was
   re-read against version 2 and needed no change but its version;
   `lu-13-decrypted.json` gains the cases of a sealed round.
+- **Version 3.** The key round, LU-14 to LU-19: the commitment, a key
+  message's validity, when a key publisher may release, a PTC member's
+  vote, the next slot's tally, and what `revealed` is and what the record
+  says of a missing key (decision record 0070). LU-2 gains `k_dem`,
+  `key_commitment` and `decrypts`, which enter the hash only away from
+  their defaults, so every vector of version 2 is the same sealed
+  transaction under version 3 and needed no change but its version.
