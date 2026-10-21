@@ -282,7 +282,10 @@ they added; their experiments are not part of this repository.
     version 7 names `exp-frames` experiment 48's bound template, read from
     the testnet, and judges that experiment's mined and refused spends and
     every signature entry a template must skip (decision record 0069), at
-    `d415e5d`, in #8.
+    `d415e5d`, in #8, merged. *Re-pricing, 2026-10-21:* at the owner's
+    word, version 8 lets the holder of a bound ticket re-price at each
+    bump, within the ticket's price (CG-6, decision record 0080), at
+    `43dbc1f`, in #9.
 
 44. **An ERC-8421 profile.** Read from ERC-8421: stake and reputation for
     paymasters and other operators, and what a fresh sender is asked for.
