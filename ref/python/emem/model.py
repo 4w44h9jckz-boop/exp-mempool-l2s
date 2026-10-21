@@ -27,10 +27,13 @@ class Account:
     storage: dict[int, int] = field(default_factory=dict)
     nonce_seqs: dict[int, int] = field(default_factory=dict)
     withdrawal: int = 0
+    stake: int = 0  # MD-2, version 10: what ERC-8421's Staking Registry reports
+    unstake_delay: int = 0
+    withdrawing: bool = False
 
     def copy(self) -> Account:
         return Account(self.nonce, self.balance, self.code, dict(self.storage),
-                       dict(self.nonce_seqs), self.withdrawal)
+                       dict(self.nonce_seqs), self.withdrawal, self.stake, self.unstake_delay, self.withdrawing)
 
 
 _EMPTY = Account()
@@ -78,6 +81,11 @@ class State:
 
     def withdrawal(self, addr: str) -> int:
         return self.account(addr).withdrawal
+
+    def stake(self, addr: str) -> tuple[int, int, bool]:
+        """MD-2: the stake, unstake delay and withdrawal flag the Staking Registry reports for `addr`."""
+        a = self.account(addr)
+        return a.stake, a.unstake_delay, a.withdrawing
 
     def nonce_seq(self, addr: str, key: int) -> int:
         """MD-3: key 0 is the account nonce (EIP-8250)."""

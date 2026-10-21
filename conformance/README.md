@@ -46,7 +46,7 @@ One JSON object per file, named after the clause (`np-11-replacement.json`):
 | `also` | optional: other clauses the cases also bind, from any document |
 | `document` | the file under `docs/spec/` |
 | `version` | the document version the vector was written against |
-| `operation` | `pool`, `next_base_fee`, `intrinsic_gas`, `frame_gas`, `ticket_fee`, `surface` or `replay` |
+| `operation` | `pool`, `next_base_fee`, `intrinsic_gas`, `frame_gas`, `ticket_fee`, `surface`, `replay`, `claim_ticket`, `descriptor` or `key_round` |
 | `distinguishes` | one sentence: what a failure here would mean |
 | `cases` | a list of cases |
 
@@ -62,6 +62,44 @@ in its document, and every clause marked normative has at least one vector.
   `max_gas` and `max_cost`, FEE-4.
 - `ticket_fee`: each case has `st`, `base_fee` and `expect` with `can_pay` and
   `cost`, and, if it can pay, `priority`, `tob` and `ticket_fee`, LU-3.
+
+### The `descriptor` operation
+
+Each case loads one descriptor (`docs/spec/13-descriptors.md`) at a node
+that holds those of `store` first, each a file, `{"file": path}`, or a
+descriptor written out. The one it loads is given as `text`, the file's
+text exactly; as `descriptor`, a value written out; or as `file`. `expect`
+names `result`, `ok` or the code refusing it, and, on a refusal, `rule`,
+the module it names; on `ok`, any of `canonical` (DS-2), `id` (DS-3),
+`modules`, how many effective modules it has, `set_by`, module to the
+identifier of the descriptor that set it (DS-5), `profile`, the profile it
+compiles to (DS-6), and `config`, parameters of FP-1, AG-1, CG-1 or AM-1
+with the values it compiles to.
+
+### The `key_round` operation
+
+A case plays the key round of `docs/spec/06-lucid.md` (LU-14 to LU-19) over
+one scheduling block. Case keys: `chain_id`, the chain's, 1 by default, and
+`block`, with `root` (`B`), `slot` (1), `gas_limit` (30000000), `attested`
+(true) and `commitments`, the sealed transactions LU-12 committed, in
+commitment order, as LU-2 objects with the defaults below (`type` may be
+left out). Keys are `0x` and 64 hexadecimal digits. A commitment is named
+by its `label`, which stands for its `commitment_root`, since a reader
+cannot compute the model's hash by hand.
+
+| Step | Does |
+| --- | --- |
+| `{"commitments": {}, "expect": [{"root": label, "key": k, "gas_obligation": g, "executable": []}, ...]}` | LU-14: the block's commitments, in order |
+| `{"release": {"publisher": p, "observed": o}, "expect": [label, ...]}` | LU-16: the commitments whose key message `p` may release, in order, having observed the block (`o`, true by default); each released message is named by its commitment's label for later steps |
+| `{"message": m, "as": name, "expect": reason, "expect_read": r}` | LU-15: `m` is a key message, or the name of one; the reason is `valid` or the first check that applies; `expect_read`, optional, whether step 6 read the ciphertext; `as`, optional, names the message for later steps |
+| `{"vote": {"deadline": d, "received": [[name, at], ...]}, "expect": [bit, ...], "expect_read": [label, ...]}` | LU-17: a member's `keys_observed` from the messages it received and when, and the commitments whose ciphertext it read, in commitment order |
+| `{"tally": {"ptc": [member, ...], "vote_deadline": v, "attestation": a, "votes": [[member, [bit, ...], at], ...]}, "expect": [[treatment, ...], ...], "expect_counts": [{"t1": .., "t0": .., "l1": .., "l0": .., "e": ..}, ...]}` | LU-18: for each commitment, the treatments allowed, sorted (`missing`, `observed`); `expect_counts`, optional, the counts behind them |
+| `{"blame": {"deadline": d, "received": [[name, at], ...]}, "expect": {"revealed": [label, ...], "missing": {label: outcome, ...}}}` | LU-19, after a `tally` step: the commitments that are revealed, in order, and for each treated as missing, `undecryptable`, `late`, `withheld` or `unvoted`, on the record of the messages received |
+
+A key message is `{"chain_id": c, "root": r, "slot": s, "commit_index": j,
+"k_dems": [k, ...]}`; `chain_id`, `root` and `slot` default to the case's
+and its block's, `commit_index` to 0, and `k_dems` to the one key, `k_dem`,
+of the commitment at `commit_index`, or 32 zero bytes if there is none.
 
 ### The `surface` operation
 
@@ -111,7 +149,9 @@ the sealed pool behind one shared reservation tracker, through a list of
 
 | Case key | Default | Holds |
 | --- | --- | --- |
-| `profile` | `eip-8141` | the frame pool profile (FP-1, `matcha` of MA-1, `eip-8288` of AG-1, or `eip-8272` of RR-1); the nonce pool always uses `geth` |
+| `profile` | `eip-8141` | the frame pool profile (FP-1, `matcha` of MA-1, `eip-8288` and `eip-8288-master` of AG-1, or `eip-8272` of RR-1); the nonce pool always uses `geth` |
+| `descriptor` | none | in place of `profile`: the stem of a file of `docs/spec/descriptors/`, loaded after its parents, whose ruleset the frame pool runs (DS-6); with it, every refusal must name a rule of the descriptor (DS-7) |
+| `reputation` | `{}` | under `erc-8421`: the counters the node was given, address to `{"seen": s, "included": i}` (AM-13) |
 | `sealed` | `off` | the sealed pool profile (LU-1): `off`, which refuses every sealed transaction, or `eip-8184` |
 | `focil` | `off` | the inclusion-list profile (IL-1): `off`, `eip-7805` or `eip-8369` |
 | `config` | `{}` | overrides, as `{"nonce": {...}, "frame": {...}, "sealed": {...}, "focil": {...}}` with the parameter names of NP-1, FP-1, MA-1, AG-1, LU-1, IL-1 and RR-1 |
@@ -122,7 +162,8 @@ the sealed pool behind one shared reservation tracker, through a list of
 
 | Step | Does |
 | --- | --- |
-| `{"add": [tx, ...], "now": t, "expect": [result, ...]}` | `add` at time `t` (default 0); each result is `ok` or an error code |
+| `{"add": [tx, ...], "now": t, "expect": [result, ...], "expect_rules": [rule, ...]}` | `add` at time `t` (default 0); each result is `ok` or an error code; under a `descriptor`, `expect_rules`, optional, is the module each refusal names, `null` for `ok` (DS-7) |
+| `{"reputation": address, "expect": {"seen": s, "included": i, "status": state}}` | an entity's counters and its state, `ACTIVE`, `THROTTLED` or `BANNED`, under `erc-8421` (AM-13) |
 | `{"reset": {"head": {...}, "state": {...}, "roots": [...], "verdicts": {...}}, "now": t}` | `reset`; both objects are merged field by field over the previous head and state, `roots`, optional, is written over the state as the case key is, and `verdicts`, optional, maps a pending transaction's label to its verdict at the new head (MD-8) |
 | `{"tick": t}` | `tick(t)` |
 | `{"expect_pool": {"pending": {...}, "queued": {...}}}` | the pool's content, sender to labels in nonce order; senders not listed hold nothing |
@@ -147,7 +188,9 @@ A wrapper is `{"mode": m, "txs": [...], "deps": [...], "proofs": [...],
 or `{"hash": tx}` for a transaction sent by hash, whose hash is that of the
 transaction written out. A triple, in a frame's `deps` or a wrapper's, is
 `[scheme, data_hash, vk_hash]`, with scheme 16 for leanSPHINCS and 17 for
-leanSTARK (EIP-8288, Constants).
+leanSTARK (EIP-8288, Constants). A frame's `reads` and `writes` are
+`[address, slot, expected]` and `[address, slot, value]`, each with an
+optional fourth element, the address the slot is associated with (MD-6).
 
 Transactions are referred to by `label`, which is part of their identity (MD-7).
 Several frame transactions from one sender, which only `disjoint-keys` and
@@ -175,7 +218,8 @@ So that a vector shows only what it is about, every field has a default:
   `max_preceding` 31, `key_publisher` and `fee_recipient` `kp`, `key_fee` 0,
   `size` 512, `signature_id` 1, `valid_signature`, `ciphertext_ok` and
   `revealed` true, `used` equal to `gas_limit`, no `to`, `pulls` and `pays`
-  empty, `atomic` true and `revert_used` equal to `used`; its cost is
+  empty, `atomic` true and `revert_used` equal to `used`, `k_dem` 32 zero
+  bytes, `key_commitment` its keccak256 and `decrypts` true; its cost is
   10000000;
 - frame: `flags` 0, no `target`, `exec_gas` 0, `state_gas` 0, `value` 0,
   `data_size` 0, no `approves`, `reverts` false, empty `opcodes`, `reads`,

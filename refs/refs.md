@@ -183,7 +183,18 @@ says is checked against the primary source before it is relied on.
   EIP-8141 frames at this commit do not have (they carry `limits`), and the
   wrapper limits and "all currently active transactions" cannot both hold.
   Used for `docs/spec/05-aggregation.md`, decision records 0012 and 0013 and
-  experiment 06.
+  experiment 06. Read again in full on 2026-10-20 at master
+  `899bef0ae0f9358f246e6fe833fe580b0564fbb2`, for the profile
+  `eip-8288-master` (decision record 0063): `DEP_VERIFY_FRAME_MODE` is 4;
+  `LEANSTARK_SCHEME` "is reserved: a frame that uses it is invalid until
+  `get_deps_hash` is defined for it", and `get_deps_hash` "is defined for
+  lists of `LEANSPHINCS_SCHEME` dependencies"; "The frame must not be part of
+  an EIP-8141 atomic batch", and its `limits.state` is 0; "A `data_hash` of
+  32 zero bytes stands for the signature hash of the containing
+  transaction"; a mode 1 wrapper's check 5, `deps` the union of its
+  transactions'; `recursive_stark_gas(tx)` added to each transaction's
+  intrinsic gas; and a receipt for the dependency frame. The mempool
+  sections are otherwise as at `258836f9`.
 - **EIP-8209, Commit-Reveal Transaction Frames**, Draft, by Forshtat and
   Nacson, same commit, read 2026-10-08 only for its frame modes: its COMMIT
   frame is "Mode 0x03", the value EIP-8288 gives `DEP_VERIFY_FRAME_MODE`, and
@@ -237,6 +248,20 @@ says is checked against the primary source before it is relied on.
   intermediaries can offer, e.g., offchain revert protection, that the
   public path cannot replicate"). Used for LU-13 in `docs/spec/06-lucid.md`
   version 2 and decision record 0045.
+  Read again 2026-10-20, at `258836f9` and byte-identical on master
+  `ed9b712690ba810f652d2ec76293ec5c299e2069`, for the key round: Extended
+  payload bid with ST-commitments ("For a non-bundle commitment,
+  `executable` is empty and `gas_obligation = ticket.gas_limit`"), Key
+  message and its validity (the five conditions, the fifth "successfully
+  decrypts the transaction(s)"), Key release (the publisher's checks before
+  release, and "When the key publisher is confident that the beacon block
+  will become canonical (for example after observing attestations for
+  it)"), Key timeliness (`keys_observed`, `timely_1`, `timely_0`, `late_1`,
+  `late_0`, `equivocated_votes`, the two conditions, and "If this test
+  fails for any key, the PTC of the next slot votes against the payload
+  timeliness"; the deadlines are named, with no values), and Rationale, Key
+  publisher liability for non-reveal. Used for LU-14 to LU-19 in
+  `docs/spec/06-lucid.md` version 3 and decision record 0070.
 - **EIP-7805, Fork-choice enforced Inclusion Lists (FOCIL)**, Draft, same
   commit, read 2026-10-08 first only for `IL_COMMITTEE_SIZE`, 16, from which
   EIP-8184 derives `MAX_ST_COMMITS`. Read in full the same day, and unchanged
@@ -428,7 +453,20 @@ says is checked against the primary source before it is relied on.
   sender under keyed nonces. Read and reported on in the session; no clause
   rests on it yet. Named in decision record 0035 as the reason a bundler is
   the host for a second implementation, and as the profile that comes here
-  first.
+  first. Read again on 2026-10-20 at the same head, `493ba8ac`, whole, for
+  `13-descriptors.md` (Alternative Mempools: "the IPFS hash of a document
+  that describes its rules") and `14-erc-8421.md`, every rule of its
+  Specification; decision records 0060 and 0061.
+- **RFC 8785, JSON Canonicalization Scheme (JCS)**, read 2026-10-20:
+  section 3.2.2.3 (numbers serialized as ECMAScript does) and 3.2.3
+  (members sorted by UTF-16 code units). Used for DS-2, decision record
+  0060.
+- **multiformats** `cid` at `9eca1c5b`, `multicodec` at `8d9e9b3b` and
+  `multibase` at `d7406cde`, read 2026-10-20: the CIDv1 grammar
+  `<multibase-prefix><multicodec-cidv1><multicodec-content-type><multihash-content-address>`;
+  `cidv1` `0x01`, `raw` `0x55`, `sha2-256` `0x12`; multibase `b`, "base32",
+  "RFC4648 case-insensitive - no padding". Used for DS-3, decision record
+  0060.
 - **skandha**, etherspot/skandha at `acba0d8`, read 2026-10-13: an ERC-4337
   bundler in TypeScript (Bun and Lerna, vitest). The owner's fork,
   4w44h9jckz-boop/skandha, holds this repository's second implementation in

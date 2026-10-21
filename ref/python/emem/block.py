@@ -323,7 +323,7 @@ def apply_outcome(state: State, tx: AnyTx, block: Head, coinbase: str, frame_con
 
 
 def _write(state: State, tx: Tx, block: Head, frame_config: FramePoolConfig) -> None:
-    for addr, slot, value in tx.writes:
+    for addr, slot, value, *_ in tx.writes:
         state.edit(addr).storage[slot] = value
     apply_writes(state, tx.root_writes, block.slot, frame_config)  # RR-3
 
@@ -380,7 +380,7 @@ def _apply_frame(state: State, tx: FrameTx, block: Head, coinbase: str, cfg: Fra
         if kind == DEPLOY and frame.installs_code is not None:
             sender = state.edit(tx.sender)
             sender.code = frame.installs_code
-            for addr, slot, value in frame.writes:
+            for addr, slot, value, *_ in frame.writes:
                 sender.storage[slot] = value
     for frame in prefix.rest:
         if frame.mode == SENDER_MODE and frame.value:
@@ -388,7 +388,7 @@ def _apply_frame(state: State, tx: FrameTx, block: Head, coinbase: str, cfg: Fra
             if state.balance(tx.sender) >= frame.value:
                 state.edit(tx.sender).balance -= frame.value
                 state.edit(target).balance += frame.value
-    for addr, slot, value in tx.writes:
+    for addr, slot, value, *_ in tx.writes:
         state.edit(addr).storage[slot] = value
     apply_writes(state, tx.root_writes, block.slot, cfg)  # RR-3
     return None

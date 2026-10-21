@@ -13,7 +13,7 @@ from emem_sim import (BumpLoad, ChainConfig, Clearing, Committee, CopiesLoad, Fa
                       ShuffleRounds, Simulation, SponsoredLoad, Spend,
                       SybilLoad, Tickets, TransferLoad, Updater, Upgrade, WalletLoad, backed_tx, bump_fees, fixed, one_of, uniform)
 from emem_sim.batch import MEASURED, SINGLE_MS, batch_ms, verify
-from emem_sim.issuers import Defence, Issuers, JunkProofs, guard
+from emem_sim.issuers import BANNED, THROTTLED, Bond, Defence, Issuers, JunkProofs, guard
 from emem_sim.network import INFLATED, budget
 
 
@@ -1575,6 +1575,74 @@ class TestIssuers(unittest.TestCase):
         self.assertEqual(counts["ticket", "x"] + counts["prefix", "x"], 0)
         self.assertEqual(work(sim, origin="x", event="proof"), 0)
         self.assertTrue(all(rec.txs[tx.hash].included_at is not None for tx in wallets.txs))
+
+
+class TestBond(unittest.TestCase):
+    """The third defence: ERC-8421's stake and reputation for ticket paymasters (decision record 0062)."""
+
+    GATED, PAYERS = TestIssuers.GATED, TestIssuers.PAYERS
+    # AM-1's parameters, made small: banned once seen // 1 > included + 3, refreshed every 120 s
+    SMALL = EIP_8141.with_(min_inclusion_rate_denominator=1, throttling_slack=1, ban_slack=3, refresh_seconds=120)
+
+    def bonded(self, *junk, bonded=frozenset({"h", "x0", "x1"}), config=SMALL, run=300):
+        return TestIssuers.guarded(self, Defence(bond=Bond(bonded, config)), *junk, run=run)
+
+    def test_an_unbonded_paymasters_tickets_are_refused_before_any_check(self):
+        sim, wallets, rec, (x,), _, counts = self.bonded(
+            dict(name="x", issuers=["x3"], count=1, every=12, start=60, stop=240), config=EIP_8141)
+        self.assertEqual(x.answers, Counter({"ErrIssuerUnbonded": x.sent}))
+        self.assertEqual(counts["ticket", "x"] + counts["prefix", "x"], 0)
+        self.assertEqual(work(sim, origin="x", event="proof"), 0)
+        self.assertTrue(all(rec.txs[tx.hash].included_at is not None for tx in wallets.txs))
+
+    def test_a_bonded_self_issuer_is_banned_after_its_failures_and_moves_on(self):
+        sim, _, _, (x,), guards, counts = self.bonded(
+            dict(name="x", issuers=["x0", "x1"], count=1, every=12, start=60, stop=110, rotate=True), run=118)
+        nodes = len(sim.net.nodes)
+        # five rounds: x0 is throttled at seen 2 (2 > 0 + 1) and banned at 4 (4 > 0 + 3), the fifth goes to x1
+        self.assertEqual(work(sim, origin="x", event="proof"), 5 * nodes)
+        self.assertEqual(x.answers["ErrEntityBanned"], nodes)
+        self.assertEqual(counts["banned", "x"], nodes)
+        for g in guards.values():
+            self.assertEqual(g.counters["x0"], [4, 0])
+            self.assertEqual(g.counters["x1"], [1, 0])
+            self.assertEqual([s for _, who, s in g.states if who == "x0"], [THROTTLED, BANNED])
+            self.assertGreater(g.time_in("x0", BANNED, 118), 0)
+
+    def test_a_refresh_reopens_a_banned_paymaster(self):
+        sim, _, _, (x,), guards, _ = self.bonded(
+            dict(name="x", issuers=["x0"], count=1, every=12, start=60, stop=110), run=130)
+        for g in guards.values():
+            g.refresh(130)
+            self.assertEqual(g.counters["x0"], [3, 0])  # 4 seen, then 4 * 23 // 24 at 120 s: throttled again
+            states = [(t, s) for t, who, s in g.states if who == "x0"]
+            self.assertEqual([s for _, s in states], [THROTTLED, BANNED, THROTTLED])
+            self.assertEqual(states[2][0], 120)
+            self.assertEqual(g.time_in("x0", BANNED, 130), 120 - states[1][0])
+
+    def test_a_throttled_paymaster_backs_only_so_many_pending_spends(self):
+        # a holder of h's tickets fails four proofs a node a slot; h is throttled and never banned
+        config = EIP_8141.with_(min_inclusion_rate_denominator=1, throttling_slack=2, ban_slack=10**6,
+                                throttled_entity_mempool_count=1)
+        sim, wallets, _, (g,), guards, counts = self.bonded(
+            dict(name="g", issuers=["h"], count=4, every=12, start=60, stop=240), config=config)
+        self.assertGreater(counts["throttled", "d"], 0)
+        self.assertGreater(g.answers["ErrEntityThrottled"], 0)  # junk too, while h backs a pending spend
+        refused = Counter(a for answers in wallets.answers.values() for a in answers)
+        self.assertGreater(refused["ErrEntityThrottled"], 0)
+        for gd in guards.values():
+            self.assertIn(THROTTLED, [s for _, who, s in gd.states if who == "h"])
+            self.assertNotIn(BANNED, [s for _, who, s in gd.states if who == "h"])
+
+    def test_an_honest_paymasters_spends_count_as_seen_and_included(self):
+        sim, wallets, rec, _, guards, _ = self.bonded(config=EIP_8141)
+        landed = sum(rec.txs[tx.hash].included_at is not None for tx in wallets.txs)
+        self.assertGreater(landed, 20)
+        for g in guards.values():
+            seen, included = g.counters["h"]
+            self.assertEqual(seen, len(wallets.txs))  # every node admits every spend once
+            self.assertGreaterEqual(included, landed - 2)  # all but the last blocks' spends
+            self.assertEqual(g.state("h"), "ACTIVE")
 
 
 class TestBumping(unittest.TestCase):

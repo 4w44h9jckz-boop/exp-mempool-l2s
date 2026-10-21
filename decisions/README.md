@@ -64,3 +64,8 @@ and says so.
 | [0057](0057-a-ticket-paymaster-is-recognised-by-its-code-and-a-self-issuer-pays-for-junk-proofs-only-once.md) | A ticket paymaster is recognised by its code, and a self-issuer pays for junk proofs only once |
 | [0058](0058-the-surface-reads-a-paymasters-code-from-the-client-and-checks-a-claim-before-asking-about-the-prefix.md) | The surface reads a paymaster's code from the client, and checks a claim before asking about the prefix |
 | [0059](0059-two-defences-against-a-self-issuers-junk-proofs-are-modelled-in-the-simulator-not-specified.md) | Two defences against a self-issuer's junk proofs are modelled in the simulator, not specified |
+| [0060](0060-a-ruleset-is-a-descriptor-file-with-a-content-identifier-modules-and-a-parent.md) | A ruleset is a descriptor file, with a content identifier, modules and a parent |
+| [0061](0061-erc-8421-s-standard-ruleset-read-into-the-model.md) | ERC-8421's standard ruleset, read into the model |
+| [0062](0062-a-bond-on-the-ticket-paymaster-is-modelled-in-the-simulator-as-erc-8421-s-stake-and-reputation.md) | A bond on the ticket paymaster is modelled in the simulator, as ERC-8421's stake and reputation |
+| [0063](0063-eip-8288-on-master-is-a-second-profile-beside-the-pinned-one-with-leanstark-reserved.md) | EIP-8288 on master is a second profile beside the pinned one, with leanSTARK reserved |
+| [0070](0070-the-key-round-is-specified-from-the-eips-text-with-real-keys-and-decryption-as-a-field.md) | The key round is specified from the EIP's text, with real keys and decryption as a field |

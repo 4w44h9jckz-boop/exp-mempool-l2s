@@ -214,8 +214,8 @@ class Frame:
     approves: int | None = None
     reverts: bool = False
     opcodes: frozenset[str] = frozenset()
-    reads: tuple[tuple[str, int, int | None], ...] = ()
-    writes: tuple[tuple[str, int, int], ...] = ()
+    reads: tuple[tuple, ...] = ()  # (address, slot, expected[, associated]), MD-6
+    writes: tuple[tuple, ...] = ()  # (address, slot, value[, associated]), MD-6
     calls: tuple[str, ...] = ()
     installs_code: str | None = None
     deadline: int | None = None
@@ -306,12 +306,12 @@ class FrameTx:
     @cached_property
     def dependencies(self) -> tuple[Dependency, ...]:
         """AG-4: the sorted, deduplicated triples of its dependency frames."""
-        return tuple(sorted({d for f in self.frames if f.mode == DEP_VERIFY_MODE for d in f.deps}))
+        return tuple(sorted({d for f in self.frames for d in f.deps}))  # only a dependency frame has deps (MD-6)
 
     @cached_property
     def declared(self) -> int:
         """AG-8: how many triples its dependency frames declare, duplicates included."""
-        return sum(len(f.deps) for f in self.frames if f.mode == DEP_VERIFY_MODE)
+        return sum(len(f.deps) for f in self.frames)
 
     @property
     def max_gas(self) -> int:

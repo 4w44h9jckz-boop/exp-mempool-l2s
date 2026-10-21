@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from . import errors as E
-from .dependencies import counts, union
+from .dependencies import counts, dependencies, union
 from .errors import TxError
 from .tx import LEANSPHINCS, Dependency, FrameTx
 from .txpool import TxPool
@@ -45,9 +45,9 @@ class Wrapper:
     signed: tuple[bool, ...] = ()  # mode 0, CG-3: whether each proof is the one its sender signed; () if all are
 
 
-def wrap(txs: list[FrameTx], mode: int = 0) -> Wrapper:
-    """An honest wrapper: its transactions' dependencies, and proofs that verify."""
-    deps = union(txs)
+def wrap(txs: list[FrameTx], mode: int = 0, cfg=None) -> Wrapper:
+    """An honest wrapper: its transactions' dependencies under `cfg`'s profile, and proofs that verify."""
+    deps = union(txs, cfg)
     if mode == 0:
         return Wrapper(tuple(txs), 0, deps, (True,) * len(deps))
     return Wrapper(tuple(txs), 1, deps, stark=Stark(deps))
@@ -97,10 +97,15 @@ class Aggregator:
             if wrapper.mode == 0:
                 if any(tx is None for tx in resolved):
                     raise TxError(E.ErrWrapperUnknownTx)
-                if tuple(wrapper.deps) != union(resolved):
+                if tuple(wrapper.deps) != union(resolved, cfg):
                     raise TxError(E.ErrWrapperDeps)
-            elif tuple(wrapper.stark.covers) != tuple(wrapper.deps):
-                raise TxError(E.ErrWrapperDeps)
+            else:
+                if tuple(wrapper.stark.covers) != tuple(wrapper.deps):
+                    raise TxError(E.ErrWrapperDeps)
+                if cfg.mode_1_union:  # as far as the node can see (decision record 0063)
+                    seen = set(union([tx for tx in resolved if tx is not None], cfg))
+                    if not seen <= set(wrapper.deps) or (None not in resolved and seen != set(wrapper.deps)):
+                        raise TxError(E.ErrWrapperDeps)
             if wrapper.mode == 0 or cfg.cap_aggregates:
                 sigs, starks = counts(wrapper.deps)
                 if sigs > cfg.max_sig_deps_per_wrapper or starks > cfg.max_stark_deps_per_wrapper:
@@ -118,7 +123,7 @@ class Aggregator:
             elif wrapper.mode == 0:  # step 5, in the order of the triples, as far as the first that fails
                 owner: dict[Dependency, FrameTx] = {}
                 for tx in resolved:
-                    for d in tx.dependencies:
+                    for d in dependencies(tx, cfg):
                         owner.setdefault(d, tx)
                 for d, ok in zip(wrapper.deps, wrapper.proofs):
                     self._count("proof", owner.get(d))
@@ -127,7 +132,7 @@ class Aggregator:
                 if gated:  # CG-4, CG-5
                     bad = {d for d, ok in zip(wrapper.deps, wrapper.proofs) if not ok}
                     for tx in resolved:
-                        frame.proof_verified(tx, any(d in bad for d in tx.dependencies))
+                        frame.proof_verified(tx, any(d in bad for d in dependencies(tx, cfg)))
                 if not all(wrapper.proofs):
                     raise TxError(E.ErrWrapperProof)
             else:
@@ -170,6 +175,7 @@ class Aggregator:
         frame = self.pool.frame
         cfg = frame.config
         held = {h: e for h, e in frame.entries.items() if e.tx.dependencies}
+        owned = {h: dependencies(e.tx, cfg) for h, e in held.items()}  # AG-4 under the profile
         received, self.received = self.received, []
         self.proving_time, self.memory, self.inputs, self.verified = 0, 0, 0, 0
         if not held or (cfg.claims and not cfg.verifies):  # CG-7 step 5: a relay builds none
@@ -192,14 +198,14 @@ class Aggregator:
             if h in chosen or h not in held:
                 return
             tx = held[h].tx
-            more = deps.union(tx.dependencies)
+            more = deps.union(owned[h])
             if cfg.cap_aggregates:
                 sigs, starks = counts(more)
                 if sigs > cfg.max_sig_deps_per_wrapper or starks > cfg.max_stark_deps_per_wrapper:
                     return
             inputs: dict[int, tuple[Dependency, ...]] = {}  # AG-9: the inputs this transaction adds
             verify: set[Dependency] = set()
-            for d in tx.dependencies:
+            for d in owned[h]:
                 if d in covered or d in verify or any(d in c for c in inputs.values()):
                     continue
                 if d in previous_cover:  # 1
@@ -251,7 +257,7 @@ class Aggregator:
             self.previous, self.previous_deps = [], ()
             return None
         for h in listed:
-            for d in held[h].tx.dependencies:
+            for d in owned[h]:
                 if d not in self.folded:
                     self.folded.add(d)
                     self._count("fold" if d in verified else "cover", held[h].tx)

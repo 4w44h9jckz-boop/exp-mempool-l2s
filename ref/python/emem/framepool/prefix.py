@@ -18,7 +18,7 @@ from ..dependencies import check_frame, check_limits
 from ..errors import TxError
 from ..model import Head, State, is_delegation
 from ..tx import (APPROVE_EXECUTION, APPROVE_PAYMENT, APPROVE_SCOPE_MASK, ATOMIC_BATCH_FLAG, DEFAULT_MODE,
-                  DEP_VERIFY_MODE, MAX_FRAMES, SENDER_MODE, SIGNATURE_GAS, TX_MAX_GAS_LIMIT, VERIFY_MODE, Frame,
+                  MAX_FRAMES, SENDER_MODE, SIGNATURE_GAS, TX_MAX_GAS_LIMIT, VERIFY_MODE, Frame,
                   FrameTx)
 from .config import FramePoolConfig
 
@@ -93,7 +93,7 @@ def executed(tx: FrameTx, cfg: FramePoolConfig) -> tuple[Frame, ...]:
     """AG-3: the frames FP-4 to FP-6 see, which are all of them unless the profile admits dependency frames."""
     if not cfg.dependency_frames:
         return tx.frames
-    return tuple(f for f in tx.frames if f.mode != DEP_VERIFY_MODE)
+    return tuple(f for f in tx.frames if f.mode != cfg.dep_frame_mode)
 
 
 def analyse(tx: FrameTx, cfg: FramePoolConfig) -> Prefix | None:
@@ -127,10 +127,9 @@ def _check_static(tx: FrameTx, gas_limit: int, cfg: FramePoolConfig) -> Prefix |
         return err.code
 
 
-def _static(tx: FrameTx, gas_limit: int, cfg: FramePoolConfig) -> Prefix:
+def check_fp3(tx: FrameTx, gas_limit: int, cfg: FramePoolConfig) -> None:
+    """FP-3: the EIP's static constraints, with EN-3's and AG-2's under a profile that admits them."""
     frames, sender = tx.frames, tx.sender
-
-    # FP-3: the EIP's static constraints
     if not 1 <= len(frames) <= MAX_FRAMES:
         _fail(E.ErrFrameMalformed)
     keys = tx.nonce_keys
@@ -142,8 +141,10 @@ def _static(tx: FrameTx, gas_limit: int, cfg: FramePoolConfig) -> Prefix:
         _fail(E.ErrFrameMalformed)
     expiry_frames = 0
     for i, f in enumerate(frames):
-        if f.mode == DEP_VERIFY_MODE and cfg.dependency_frames:  # AG-2 in place of the rules below
-            check_frame(f, cfg.max_dependencies_per_frame)
+        if f.mode == cfg.dep_frame_mode and cfg.dependency_frames:  # AG-2 in place of the rules below
+            check_frame(f, cfg)
+            if not cfg.dep_in_batch and i and frames[i - 1].flags & ATOMIC_BATCH_FLAG:
+                _fail(E.ErrDepFrameMalformed)
             continue
         if f.mode not in (DEFAULT_MODE, VERIFY_MODE, SENDER_MODE) or not 0 <= f.flags < 8:
             _fail(E.ErrFrameMalformed)
@@ -175,9 +176,14 @@ def _static(tx: FrameTx, gas_limit: int, cfg: FramePoolConfig) -> Prefix:
     if gas.max_gas > gas_limit:
         _fail(E.ErrGasLimit)
 
+
+def _static(tx: FrameTx, gas_limit: int, cfg: FramePoolConfig) -> Prefix:
+    sender = tx.sender
+    check_fp3(tx, gas_limit, cfg)
+
     # AG-4: limits per transaction
     if cfg.dependency_frames:
-        check_limits(tx, cfg.max_sigs_per_tx, cfg.max_starks_per_tx)
+        check_limits(tx, cfg)
 
     # FP-5: structure, over the frames AG-3 leaves
     kinds = [classify(f, sender, cfg) for f in executed(tx, cfg)]
@@ -212,10 +218,10 @@ def check_trace(frame: Frame, sender: str, deploy: bool, state: State, cfg: Fram
     for op in frame.opcodes:
         if op in BANNED_OPCODES and not (deploy and op in ALLOWED_IN_DEPLOY):
             _fail(E.ErrFrameBannedOpcode)
-    for addr, _slot, _value in frame.writes:
+    for addr, *_ in frame.writes:
         if not (deploy and addr == sender):
             _fail(E.ErrFrameStateWrite)
-    for addr, _slot, _expected in frame.reads:
+    for addr, *_ in frame.reads:
         if addr != sender:
             _fail(E.ErrFrameStorageReadNonSender)
     for addr in frame.calls:
@@ -332,7 +338,7 @@ def simulate(tx: FrameTx, prefix: Prefix, head: Head, state: State, cfg: FramePo
             continue
         target = frame.target if frame.target is not None else sender
         code = sender_code if target == sender else state.code(target)
-        for addr, slot, _ in frame.reads:
+        for addr, slot, *_ in frame.reads:
             if addr == sender:
                 deps[("storage", sender, slot)] = state.storage(sender, slot)
         if kind == DEPLOY:
@@ -343,7 +349,7 @@ def simulate(tx: FrameTx, prefix: Prefix, head: Head, state: State, cfg: FramePo
             if code == "" or frame.installs_code is None or sender_code != "":
                 _fail(E.ErrFrameDeployNoCode)
             sender_code = frame.installs_code
-            deployed_storage.update({slot: value for addr, slot, value in frame.writes if addr == sender})
+            deployed_storage.update({slot: value for addr, slot, value, *_ in frame.writes if addr == sender})
             continue
         scope = frame.flags & APPROVE_SCOPE_MASK
         if code == "":
@@ -352,7 +358,7 @@ def simulate(tx: FrameTx, prefix: Prefix, head: Head, state: State, cfg: FramePo
         else:
             if not (kind == PAY and code == cfg.canonical_paymaster_code):
                 check_trace(frame, sender, False, state, cfg)
-            for addr, slot, expected in frame.reads:
+            for addr, slot, expected, *_ in frame.reads:
                 if addr == sender and slot in deployed_storage:
                     value = deployed_storage[slot]
                 else:
@@ -420,4 +426,6 @@ def dep_value(state: State, key: tuple) -> object:
         return state.storage(key[1], key[2])
     if kind == "withdrawal":
         return state.withdrawal(key[1])
+    if kind == "stake":  # 14-erc-8421.md, AM-14
+        return state.stake(key[1])
     raise ValueError(key)

@@ -1,12 +1,16 @@
 # 05. In-mempool aggregation (EIP-8288)
 
-Version 3, 2026-10-13. Version 1, 2026-10-08, had no proving time; version 2
-added AG-9 and its five parameters. Version 3 adds AG-10 and its five
-parameters, and changes nothing else.
+Version 4, 2026-10-20. Version 1, 2026-10-08, had no proving time; version 2
+added AG-9 and its five parameters, and version 3 AG-10 and its five.
+Version 4 adds the profile `eip-8288-master`, the EIP as it stands on master
+at `899bef0a`, with leanSTARK reserved, through five parameters of AG-1 that
+AG-2, AG-4 and AG-5 read; under `eip-8288` nothing changes (decision record
+0063).
 
 The mempool section of EIP-8288, *In-mempool signature and proof
 aggregation*, written down as clauses on top of the frame pool. The EIP is
-Draft; it was read from ethereum/EIPs at commit `258836f9` (2026-10-07),
+Draft; it was read from ethereum/EIPs at commit `258836f9` (2026-10-07), and
+for `eip-8288-master` again at master `899bef0a` (2026-10-20),
 sections "Constants", "New Frame Mode", "Transaction Dependencies", "Mempool
 Wrapper Object", "Recursive Mempool Aggregation", "Mempool-Level Limits" and
 "Gas Accounting". Quotations below are from those sections unless another is
@@ -34,7 +38,7 @@ removes `discards` (Block Validity, Recursive STARK Proof Structure).
 A pool under the `eip-8288` profile is the frame pool of `02-frame-pool.md`,
 version 4, under the `eip-8141` profile, with these changes and no others:
 
-- FP-3 admits frames of mode 3, which AG-2 checks;
+- FP-3 admits frames of mode `dep_frame_mode`, which AG-2 checks;
 - FP-4 to FP-6 do not see dependency frames (AG-3);
 - AG-4 is added to admission after FP-3, and AG-6 after FP-6;
 - AG-5 and AG-7 add wrappers, which the frame pool alone does not have, and
@@ -48,7 +52,12 @@ version 4, under the `eip-8141` profile, with these changes and no others:
 
 | Parameter | `eip-8288` | Note |
 | --- | --- | --- |
-| `dependency_frames` | true | FP-3 admits `DEP_VERIFY_FRAME_MODE`, 3; false under every profile of FP-1 |
+| `dependency_frames` | true | FP-3 admits `DEP_VERIFY_FRAME_MODE`; false under every profile of FP-1 |
+| `dep_frame_mode` | 3 | `DEP_VERIFY_FRAME_MODE` |
+| `leanstark` | `defined` | whether a leanSTARK triple is valid (`defined`) or `reserved` (AG-2) |
+| `dep_in_batch` | true | whether a dependency frame may follow a frame with `ATOMIC_BATCH_FLAG` (AG-2) |
+| `zero_data_hash` | `literal` | whether a `data_hash` of 32 zero bytes is taken as written or stands for the transaction's signature hash, `sig_hash` (AG-4) |
+| `mode_1_union` | false | whether AG-5 checks a mode 1 wrapper's `deps` against its transactions |
 | `max_dependencies_per_frame` | 256 | `MAX_DEPENDENCIES_PER_FRAME` |
 | `max_sigs_per_tx` | 16 | `MAX_SIGS_PER_TX` |
 | `max_starks_per_tx` | 1 | `MAX_STARKS_PER_TX` |
@@ -71,6 +80,18 @@ version 4, under the `eip-8141` profile, with these changes and no others:
 Every FP-1 parameter is `eip-8141`'s. The schemes are `LEANSPHINCS_SCHEME`,
 `0x10`, at `LEANSPHINCS_VERIFICATION_GAS` 3000, and `LEANSTARK_SCHEME`,
 `0x11`, at `LEANSTARK_VERIFICATION_GAS` 30000.
+
+The profile `eip-8288-master` is `eip-8288` with `dep_frame_mode` 4,
+`leanstark` `reserved`, `dep_in_batch` false, `zero_data_hash` `sig_hash`
+and `mode_1_union` true, and every other parameter the same. **Source:**
+EIP-8288 at master `899bef0a`, read 2026-10-20: Constants
+(`DEP_VERIFY_FRAME_MODE` 4), New Frame Mode ("`LEANSTARK_SCHEME` is reserved:
+a frame that uses it is invalid until `get_deps_hash` is defined for it";
+"The frame must not be part of an EIP-8141 atomic batch"), Transaction
+Dependencies ("A `data_hash` of 32 zero bytes stands for the signature hash
+of the containing transaction") and Mempool Wrapper Object (mode 1's check
+5). A later reading of master changes this column and the document's
+version (decision record 0063).
 The EIP gives no proving time, no memory and no hardware, so the profile
 leaves both budgets unset and the eight costs at 0; an experiment that sets
 them says where it took them.
@@ -88,17 +109,20 @@ The EIP names no errors; these codes are this repository's.
 
 ## Transactions
 
-**AG-2. Dependency frames.** A frame of mode 3 is a *dependency frame*. Its
+**AG-2. Dependency frames.** A frame of mode `dep_frame_mode` is a *dependency frame*. Its
 `data` is $k$ triples of 96 bytes, which the model carries as `deps`, a list of
 `(scheme, data_hash, vk_hash)` beside the frame's `data_size` (MD-6). This
 clause takes the place of FP-3's constraints on a single frame for a
 dependency frame, and FP-3's constraints on the transaction still apply. The
 pool MUST reject with `ErrDepFrameMalformed` a transaction with a dependency frame
 that breaks any of: $1 \le k \le$ `max_dependencies_per_frame`; every `scheme`
-is `0x10` or `0x11`; `data_size` is $96 k$; no `target`; `value` 0; `flags` 0;
-`exec_gas` equal to the sum over its triples of 3000 for a leanSPHINCS triple
-and 30000 for a leanSTARK one; `state_gas` 0. A frame of mode 3 under a profile
-without `dependency_frames` is `ErrFrameMalformed` (FP-3).
+is `0x10`, or `0x11` when `leanstark` is `defined`; `data_size` is $96 k$; no
+`target`; `value` 0; `flags` 0; `exec_gas` equal to the sum over its triples
+of 3000 for a leanSPHINCS triple and 30000 for a leanSTARK one; `state_gas`
+0; and, when `dep_in_batch` is false, the frame before it, if any, carries no
+`ATOMIC_BATCH_FLAG`. A frame of mode 3 or 4 that is not of mode
+`dep_frame_mode`, or of either under a profile without `dependency_frames`,
+is `ErrFrameMalformed` (FP-3).
 **Source:** New Frame Mode, "Validity constraints". A scheme byte other than
 the two, or a non-zero byte among the 31 before it, is one case in the model:
 a `scheme` value that is neither. *Interpretation:* the EIP constrains "the
@@ -117,7 +141,9 @@ the frame is never executed, so its gas is no verification work, decision
 record 0012.
 
 **AG-4. Limits per transaction.** A transaction's *dependencies* are the
-sorted, deduplicated list of the triples of all its dependency frames. The pool
+sorted, deduplicated list of the triples of all its dependency frames, where,
+when `zero_data_hash` is `sig_hash`, a triple whose `data_hash` is 32 zero
+bytes holds the transaction's signature hash in its place. The pool
 MUST reject with `ErrFrameTooManyDeps` a transaction whose dependencies hold
 more than `max_sigs_per_tx` leanSPHINCS triples or more than
 `max_starks_per_tx` leanSTARK triples. Declarations of one triple more than
@@ -127,7 +153,10 @@ Limits: "a transaction can have `<= MAX_SIGS_PER_TX` leanSPHINCS dependencies
 and `<= MAX_STARKS_PER_TX` leanSTARK dependencies", and "These limits in all
 cases apply to the length of the sorted, deduplicated dependency list". The
 limits are a mempool rule, not a validity rule: a block may include a
-transaction that breaks them.
+transaction that breaks them. Under `eip-8288-master`, Transaction
+Dependencies: `dependencies(tx)` holds `compute_sig_hash(tx)` "in place of
+the zero bytes". *Interpretation:* the model has no signature hash apart from
+MD-7's hash of the transaction, which stands for it, decision record 0063.
 
 ## Wrappers
 
@@ -142,8 +171,11 @@ order, and on the first failure refuses the whole wrapper with the code given:
 2. in mode 0, every hash names a transaction the node holds, else
    `ErrWrapperUnknownTx`;
 3. in mode 0, `deps` is the sorted, deduplicated union of the dependencies of
-   all `transactions`, and in mode 1, the recursive STARK's public input is
-   the hash of `deps`, else `ErrWrapperDeps`;
+   all `transactions`; in mode 1, the recursive STARK's public input is the
+   hash of `deps`, and, when `mode_1_union` is true, `deps` holds every
+   dependency of each transaction the wrapper carries or the node holds by
+   its hash, and nothing else when the node resolves every entry; else
+   `ErrWrapperDeps`;
 4. in mode 0, and in mode 1 when `cap_aggregates` is true, `deps` holds at
    most `max_sig_deps_per_wrapper` leanSPHINCS triples and at most
    `max_stark_deps_per_wrapper` leanSTARK triples, else
@@ -151,8 +183,9 @@ order, and on the first failure refuses the whole wrapper with the code given:
 5. in mode 0, every proof verifies, and in mode 1, the recursive STARK does,
    else `ErrWrapperProof`.
 
-A mode 1 wrapper's transactions are not checked against its `deps`, and a
-hash in it that names no transaction the node holds is answered
+Unless `mode_1_union` is true, a mode 1 wrapper's transactions are not
+checked against its `deps`. A hash in a mode 1 wrapper that names no
+transaction the node holds is answered
 `ErrWrapperUnknownTx` on its own, without refusing the rest. Triples are
 ordered by `scheme`, then `data_hash`, then `vk_hash`. **Source:** Mempool
 Wrapper Object, the wrapper encoding and the two lists of checks. The order is
@@ -165,7 +198,10 @@ one leanSTARK dependency, so the two cannot both hold once a node has two
 transactions with one each. `cap_aggregates` takes the first sentence when
 true and the second when false, decision record 0012. The EIP lists no check
 for a hash a node cannot resolve; mode 1 does not need the transactions to
-check its proof, and mode 0 does, decision record 0012.
+check its proof, and mode 0 does, decision record 0012. Under
+`eip-8288-master` mode 1's check 5 asks for the union too; a node checks it
+over the transactions it can see, since it cannot check the part of a
+transaction it cannot resolve, decision record 0063.
 
 **AG-6. Admission needs proofs.** When a wrapper passes AG-5, the node records
 as *proven* every triple in its `deps`, and then offers its transactions to
@@ -232,7 +268,12 @@ is the total number of dependency triples across all transactions in the
 block", "charged as part of the block's base fee". *Interpretation:* the EIP
 does not say whether $n$ counts declarations or the deduplicated
 `dependencies(block)`, nor who pays; the clause counts declarations, as the
-sentence reads, and charges nobody, decision record 0012.
+sentence reads, and charges nobody, decision record 0012. *Not modelled*
+under `eip-8288-master`: the EIP there adds $30000$ a declared triple to each
+transaction's intrinsic gas instead, paid by its payer; the model's FEE-4
+does not depend on a profile, so the profile keeps this clause's charge to
+the block, and a payer's `max_cost` is understated by that much, decision
+record 0063.
 
 ## Proving time
 
@@ -306,3 +347,6 @@ memory never changes which input covers a triple, decision record 0042.
   observations (MD-6) already say what its code concludes.
 - Proofs that expire, and proofs a node holds for a transaction it never
   admitted.
+- Under `eip-8288-master`, the dependency frame's receipt, and `DEPS_HASH`,
+  which the EIP leaves to be chosen with the circuit: the model's recursive
+  STARK is the list it covers.

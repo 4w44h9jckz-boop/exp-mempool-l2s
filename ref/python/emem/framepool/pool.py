@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from typing import Callable
 
 from .. import errors as E
+from ..dependencies import dependencies
 from ..errors import TxError
 from ..model import Head, State, is_delegation
 from ..reserver import Reserver
@@ -150,7 +151,7 @@ class FramePool:
             try:
                 sim = self._simulate(e.tx, e.prefix, head, state)
             except TxError as err:
-                self._remove(h, "invalidated:" + err.code)
+                self._invalidated(h, err)
                 continue
             self._index(e, -1)
             e.sim = sim
@@ -175,6 +176,10 @@ class FramePool:
                 self._remove(h, "payer:" + err.code, account=False)
                 continue
             self._account(e, +1)
+
+    def _invalidated(self, tx_hash: str, err: TxError) -> None:
+        """FP-15 step 3: a re-run that fails removes the transaction."""
+        self._remove(tx_hash, "invalidated:" + err.code)
 
     def _reuse(self, e: Entry, changed: list[tuple], state: State) -> bool:
         """FP-15 step 3 under `reuse_balance`, or MA-9 step 1: whether a change to balances alone re-runs nothing."""
@@ -293,7 +298,7 @@ class FramePool:
         """CG-2, then CG-4, then CG-6, as the pool runs them after FP-6."""
         claim = tx.claim
         if claim is None:
-            if tx.dependencies:
+            if dependencies(tx, self.config):
                 raise TxError(E.ErrClaimMissing)
             return
         if not claim.valid:
@@ -320,7 +325,7 @@ class FramePool:
             if self.config.claims:  # CG-2, CG-4, CG-6
                 self._check_claim(tx)
             if self.config.dependency_frames and not all(d in self.proven or d in self.relayed
-                                                          for d in tx.dependencies):  # AG-6, CG-7 step 3
+                                                          for d in dependencies(tx, self.config)):  # AG-6, CG-7 step 3
                 raise TxError(E.ErrFrameDepsUnproven)
             self.work[tx.sender] += admission_gas(tx, prefix)
             old_hash = None if self._many(tx) else self.by_identity.get((tx.sender, tx.nonce_keys, tx.nonce_seq))
