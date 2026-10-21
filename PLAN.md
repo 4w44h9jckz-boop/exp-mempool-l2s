@@ -278,7 +278,11 @@ they added; their experiments are not part of this repository.
     `secp256k1` entry of the transaction's own list, checked by the protocol
     over the signature hash, and every copy with a signed field changed is
     unbound. The bound template is still to come from the wallet session.
-    *Finished, 2026-10-21:* #7 merged.
+    *Finished, 2026-10-21:* #7 merged. *Template named, 2026-10-21:*
+    version 7 names `exp-frames` experiment 48's bound template, read from
+    the testnet, and judges that experiment's mined and refused spends and
+    every signature entry a template must skip (decision record 0069), at
+    `d415e5d`, in #8.
 
 44. **An ERC-8421 profile.** Read from ERC-8421: stake and reputation for
     paymasters and other operators, and what a fresh sender is asked for.
