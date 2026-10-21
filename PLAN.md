@@ -265,8 +265,12 @@ they added; their experiments are not part of this repository.
     ticket. Can the ticket's message commit to a one-time key the buyer
     chose, so that only that key's signature over the transaction's
     signature hash makes the claim count, with nothing asked of the issuer
-    when it is spent? *Started, 2026-10-21:* `10-claim-gated-admission.md`
-    version 6, CG-12 (decision record 0067).
+    when it is spent? *Done on the session branch, 2026-10-21:*
+    `10-claim-gated-admission.md` version 6, CG-12 (decision record 0067),
+    at `fdc4bb3` and `cb18a37`, in #7. The binder's signature is a
+    `secp256k1` entry of the transaction's own list, checked by the protocol
+    over the signature hash, and every copy with a signed field changed is
+    unbound. The bound template is still to come from the wallet session.
 
 44. **An ERC-8421 profile.** Read from ERC-8421: stake and reputation for
     paymasters and other operators, and what a fresh sender is asked for.
