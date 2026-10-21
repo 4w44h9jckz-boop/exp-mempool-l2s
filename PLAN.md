@@ -248,7 +248,11 @@ they added; their experiments are not part of this repository.
     `fp-12-nullifier-keys.json` (decision record 0065), at `8710ba1`, in
     [4w44h9jckz-boop/exp-mempool-l2s#7](https://github.com/4w44h9jckz-boop/exp-mempool-l2s/pull/7).
     Under `eip-8141` a transfer spends at most 5 fresh nullifiers, since each
-    costs 97,920 state gas. The wallet's real transfer is still to come.
+    costs 97,920 state gas. *Finished, 2026-10-21:* #7 merged, `main` at
+    `5b5bf5e`. *Done on the session branch, 2026-10-21:* the wallet's
+    transfer, which the testnet mined in block 491,278, through the surface:
+    `fp-07-mined-transfer.json` (decision record 0068), at `92c5d6d`, in
+    [4w44h9jckz-boop/exp-mempool-l2s#8](https://github.com/4w44h9jckz-boop/exp-mempool-l2s/pull/8).
 54. **A committee's result and its shared-state update.** A result whose
     `VERIFY` frame checks a committee's threshold signature, and an update
     sent from the committee's account with a payer: how does FP-11's one
@@ -257,8 +261,11 @@ they added; their experiments are not part of this repository.
     2026-10-21:* no clause is new; `fp-11-committee.json` and decision
     record 0066, at `7385a0f`, in #7. A BLS check is above `eip-8141`'s
     verify budget; a non-canonical paymaster lands at most one of the
-    committee's transactions a block. The committee's own shapes are still
-    to come.
+    committee's transactions a block. *Finished, 2026-10-21:* #7 merged.
+    *Done on the session branch, 2026-10-21:* the vectors follow the
+    committee's fixed result format, with two results for one request held
+    to one, at `92c5d6d`, in #8. The committee's own transactions come with
+    its end-to-end runs.
 55. **A ticket bound to its transaction.** A ticket names one slot and
     nothing the transaction does or pays, so whoever forwards a transaction
     whose sender does not sign can change its fee or calldata and keep the
@@ -271,6 +278,7 @@ they added; their experiments are not part of this repository.
     `secp256k1` entry of the transaction's own list, checked by the protocol
     over the signature hash, and every copy with a signed field changed is
     unbound. The bound template is still to come from the wallet session.
+    *Finished, 2026-10-21:* #7 merged.
 
 44. **An ERC-8421 profile.** Read from ERC-8421: stake and reputation for
     paymasters and other operators, and what a fresh sender is asked for.
