@@ -75,3 +75,4 @@ and says so.
 | [0068](0068-the-mined-aztec-model-transfer-is-judged-through-the-surface-with-two-stand-in-double-spends.md) | The mined Aztec-model transfer is judged through the surface, with two stand-in double spends |
 | [0069](0069-the-bound-template-is-experiment-48s-and-gives-a-nodes-verdict-on-every-signature-entry.md) | The bound template is experiment 48's, and gives a node's verdict on every signature entry |
 | [0070](0070-the-key-round-is-specified-from-the-eips-text-with-real-keys-and-decryption-as-a-field.md) | The key round is specified from the EIP's text, with real keys and decryption as a field |
+| [0080](0080-the-holder-of-a-bound-ticket-may-re-price-its-transaction.md) | The holder of a bound ticket may re-price its transaction |
