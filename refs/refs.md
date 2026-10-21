@@ -614,7 +614,9 @@ says is checked against the primary source before it is relied on.
   (each field element in 64 bytes, its top 16 zero and below the modulus;
   an element of the extension field as `c0` then `c1`; the point at
   infinity as zeros), "ABI for pairing check" and "Subgroup checks". Used
-  for CG-9 and CG-10.
+  for CG-9 and CG-10. Read again at `258836f9` on 2026-10-21, "Gas
+  schedule": a pairing check of $k$ pairs costs `32600*k + 37700` gas, a
+  map to G1 5,500 and an addition in G1 375. Used for decision record 0066.
 - **EIP-8250**, at `258836f9` and again on master at
   `0ce679f4654ba4d120c97113626f320475e22fa9` (2026-10-19), read
   2026-10-20: "Transaction introspection", `TXPARAM(0x0F)` and the

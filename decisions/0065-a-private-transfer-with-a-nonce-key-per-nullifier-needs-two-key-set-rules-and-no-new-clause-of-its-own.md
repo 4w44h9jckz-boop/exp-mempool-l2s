@@ -23,8 +23,10 @@ Read against the clauses:
   very same key set replace the pending one only if it pays the bump. Under
   `one`, the shared sender holds one pending transfer. Decision record 0054
   already judged the single-key case on `exp-frames`' mined pair.
-- **Gossip.** `11-surface.md`'s relay (SF-5) passes on what a node admits,
-  whatever its nonce keys.
+- **Gossip.** `11-surface.md` relays what a node admits, whatever its
+  nonce keys, and nothing it refuses (SF-6); a transfer from a peer goes
+  through the same checks (SF-7), so a double spend a node refuses goes no
+  further from it.
 - **The fee.** The contract pays for itself: its payer class is `sender`,
   so FP-11's cap of one pending transaction for a non-canonical payer does
   not apply, and FP-11's reservation does: the contract's balance must cover
@@ -47,7 +49,7 @@ charge as *Not modelled*.
    are constants, like FP-3's 64 frames, not profile parameters, so no
    descriptor changes.
 2. **No clause is new for the transfer itself.** FP-7, FP-11, FP-12, FP-15
-   and SF-5 say what a node does with it. The vectors that say so are
+   and SF-6 say what a node does with it. The vectors that say so are
    `conformance/vectors/frame-pool/fp-12-nullifier-keys.json`: two-nullifier
    transfers admitted together, a double spend that shares one nullifier
    refused before inclusion and impossible after it, the same key set only
@@ -85,8 +87,12 @@ charge as *Not modelled*.
 
 - An Aztec-model transfer spends at most 16 notes by nonce key under any
   profile, and at most 5 fresh ones under `eip-8141`'s state-gas cap.
-  Aztec's own transactions may emit more nullifiers than that; such a
-  transfer needs keys for the notes it spends only, or two transactions.
+  Aztec's own transactions may emit up to `MAX_NULLIFIERS_PER_TX`, 64
+  (`docs/aztec-as-not-a-rollup.md`); a transfer that emits more than 16
+  needs keys for the notes it spends only, or two transactions.
+- FP-12 refuses a transfer that shares some nullifiers with a pending one
+  and not all, where Aztec's own pool lets the higher priority evict it
+  (`docs/aztec-as-not-a-rollup.md`, "Replay protection and identity").
 - A shared nullifier set across senders is outside what nonce keys give:
   a key belongs to one sender, so two privacy contracts can both accept the
   same nullifier. That is the contract's to prevent, and a frame cannot.
