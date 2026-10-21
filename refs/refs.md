@@ -727,6 +727,28 @@ says is checked against the primary source before it is relied on.
   make every transaction, signature hash and `secp256k1` signature of
   `conformance/vectors/claim-gated/cg-12-bound-copies.json`. Used for CG-12
   and decision record 0067.
+- **exp-e2e-frames** (4w44h9jckz-boop/exp-e2e-frames, branch
+  `tooling-committee` at `c8eb5cc`, read 2026-10-21):
+  `committee/bls-committee/README.md`, "The signed result (fixed)" and "One
+  result per request"; `committee/fhe-committee/README.md`, "The input
+  format (fixed)"; `committee/co-withdraw/README.md`, "The witness's share
+  format (fixed)". Used for
+  `conformance/vectors/frame-pool/fp-11-committee.json` and decision record
+  0066.
+- **exp-frames** (branch `exp/42-noir-transfer` at `32586cc`, read
+  2026-10-21): `exp-frames/experiments/42-noir-transfer/README.md`, a private transfer on
+  Aztec's note and nullifier model, proved in Noir and checked in a `VERIFY`
+  frame, with its two nullifiers as EIP-8250 nonce keys;
+  `pool.groth16.json`, the transfer the Hegota testnet mined in block
+  491,278 (`0x10d33e629d2cc0b3873e9a000539b48566dd5026481802dfea99a67584768afd`,
+  receipt status 1 by `eth_getTransactionReceipt`) and the same bytes
+  refused after it; and `pool.json`, the zero-knowledge pool's two refused
+  attempts and the layout pool's transfer, mined in block 491,124 with the
+  same nullifiers. Blocks 491,123, 491,277 and 491,278 by
+  `eth_getBlockByNumber`, and the two pools' balances by `eth_getBalance`
+  at 491,123 and 491,277, 2026-10-21. Used for
+  `conformance/vectors/frame-pool/fp-07-mined-transfer.json` and decision
+  record 0068.
 - **exp-frames** (branch `claude/nifty-einstein-llp9cd` at `f0749cb`, read
   2026-10-20): `exp-frames/experiments/36-blind-tickets/`, blind tickets issued by a
   threshold committee and paid for in a paymaster's `VERIFY` frame on the

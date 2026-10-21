@@ -71,4 +71,6 @@ and says so.
 | [0064](0064-the-bond-on-the-ticket-paymaster-is-a-clause-of-claim-gated-admission.md) | The bond on the ticket paymaster is a clause of claim-gated admission |
 | [0065](0065-a-private-transfer-with-a-nonce-key-per-nullifier-needs-two-key-set-rules-and-no-new-clause-of-its-own.md) | A private transfer with a nonce key per nullifier needs two key-set rules, and no clause of its own |
 | [0066](0066-a-committees-result-and-its-update-need-no-clause-and-a-non-canonical-payer-carries-one-a-block.md) | A committee's result and its update need no clause, and a non-canonical payer carries one a block |
+| [0067](0067-a-ticket-is-bound-to-its-transaction-by-a-one-time-key-whose-signature-the-protocol-checks.md) | A ticket is bound to its transaction by a one-time key whose signature the protocol checks |
+| [0068](0068-the-mined-aztec-model-transfer-is-judged-through-the-surface-with-two-stand-in-double-spends.md) | The mined Aztec-model transfer is judged through the surface, with two stand-in double spends |
 | [0070](0070-the-key-round-is-specified-from-the-eips-text-with-real-keys-and-decryption-as-a-field.md) | The key round is specified from the EIP's text, with real keys and decryption as a field |
