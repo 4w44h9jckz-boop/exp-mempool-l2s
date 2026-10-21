@@ -1,6 +1,7 @@
 # 13. Descriptors: a ruleset as a file a node loads
 
-Version 1, 2026-10-20.
+Version 2, 2026-10-20. Version 2, the same day, adds the module `CG-11`,
+the bond of `10-claim-gated-admission.md` version 5.
 
 **Status: proposal.** EIP-8141 fixes one public mempool's rules, and
 ERC-8421 lets nodes agree on others: "Each alternative mempool is identified
@@ -130,6 +131,7 @@ the one those clauses give.
 | `CG-8` | `namespace` (string) | rule |
 | `CG-9` | none | rule |
 | `CG-10` | `template_length` (integer), `template_keccak` (string) | rule |
+| `CG-11` | `min_stake_value` (amount), `min_unstake_delay` (integer), `min_inclusion_rate_denominator` (integer), `throttling_slack` (integer), `ban_slack` (integer), `refresh_seconds` (integer), `throttled_entity_mempool_count` (integer) | rule |
 
 A **core** module is part of every frame pool this repository models; a
 **rule** module may be absent, or replaced (DS-6). A module refuses with the
@@ -201,3 +203,14 @@ a file changes its identifier, and a child's `parent` with it.
 *Not modelled:* how nodes find each other's descriptors, and the topic a
 descriptor names on the wire. ERC-8421 leaves the transport out of scope,
 and so does this document.
+
+## Version notes
+
+- **Version 2.** The module `CG-11`, the bond on the ticket paymaster of
+  `10-claim-gated-admission.md` version 5, with the seven parameters of
+  AM-1 it reads. Being a `CG` module, DS-6 step 5 requires it wherever the
+  other `CG` modules are, so `claim-gated.json` gains it with
+  `erc-8421.json`'s values, and its identifier changes (DS-8). The vectors
+  of DS-1 to DS-8 hold unchanged and now say version 2, but for the
+  identifier and the profile of `claim-gated.json`, which change with the
+  file (decision record 0064).

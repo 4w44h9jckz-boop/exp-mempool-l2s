@@ -99,6 +99,7 @@ ErrClaimRefused = "ErrClaimRefused"
 ErrClaimUsed = "ErrClaimUsed"
 ErrClaimExpired = "ErrClaimExpired"
 ErrRelayAggregate = "ErrRelayAggregate"
+ErrIssuerUnbonded = "ErrIssuerUnbonded"  # CG-11
 
 # This repository's, for ERC-8421's standard ruleset (`docs/spec/14-erc-8421.md`)
 ErrFramePreVerifyNoCode = "ErrFramePreVerifyNoCode"

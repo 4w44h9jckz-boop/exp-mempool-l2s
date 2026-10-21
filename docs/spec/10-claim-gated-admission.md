@@ -1,18 +1,21 @@
 # 10. Claim-gated admission (proposal)
 
-Version 4, 2026-10-20. Version 1, 2026-10-13, had every node verify;
+Version 5, 2026-10-20. Version 1, 2026-10-13, had every node verify;
 version 2, the same day, added `verifies` and CG-7; version 3, 2026-10-20,
 added CG-8 to CG-10, the bytes a ticket signs, how a node verifies one and
 where a transaction carries it; version 4, the same day, recognises a
-ticket paymaster by its code rather than from a set a node holds.
+ticket paymaster by its code rather than from a set a node holds; version
+5, the same day, accepts a ticket paymaster only under a bond, ERC-8421's
+stake and reputation (CG-11).
 
 **Status: proposal.** This document states, as clauses, an admission policy
 that no client implements and no EIP specifies: claim-gated admission,
 stated as six rules, R1 to R6, with a variant that remembers bad claims
 rather than slots, and with nodes that need not verify. Decision record 0037
-records the readings it rests on, and its vectors check the clauses. A
-clause marked *Interpretation* is this repository's reading where the rules
-leave a choice open, and names decision record 0037. The profile,
+records the readings it rests on, decision record 0064 those of the bond,
+and its vectors check the clauses. A clause marked *Interpretation* is this
+repository's reading where the rules leave a choice open, and names the
+decision record. The profile,
 `claim-gated`, is the specification of nothing but this document.
 
 The policy answers free work: the verification honest nodes spend on proofs
@@ -44,7 +47,10 @@ these changes and no others:
   verifying their proofs;
 - CG-8 to CG-10 say when a real transaction carries a claim and when it is
   `valid`: an issuer's BLS12-381 signature over a fixed message that names
-  the claim's chain, epoch and slot, carried to a ticket paymaster.
+  the claim's chain, epoch and slot, carried to a ticket paymaster;
+- CG-11, under `bond`, accepts a ticket only if its paymaster is staked as
+  ERC-8421 stakes an operator, keeps ERC-8421's reputation for each ticket
+  paymaster, and refuses a banned one before the ticket is checked.
 
 ## Profile
 
@@ -57,9 +63,16 @@ these changes and no others:
 | `claim_memory` | `slot` | what CG-4 records after a proof fails: `slot`, rule R3; `claim`, the variant that remembers bad claims; or `none` |
 | `signed_proofs` | false | whether a sender's signature covers the proofs a wrapper carries for its transaction; false is EIP-8288's wrapper; *Interpretation*, decision record 0037 |
 | `verifies` | true | whether the node verifies proofs; a node with false is a relay (CG-7); a value of each node, not of the network; decision record 0038 |
+| `bond` | true | whether CG-11 applies; false under every other profile, and a profile with `claims` and without `bond` is version 4's admission; decision record 0064 |
 
-Every AG-1 parameter is `eip-8288`'s. `claim_memory`, `signed_proofs` and
-`verifies` exist to be varied: the experiments measure each value.
+Every AG-1 parameter is `eip-8288`'s. Under `bond`, CG-11 reads seven of
+AM-1's parameters (`14-erc-8421.md`), with the values
+`docs/spec/descriptors/erc-8421.json` gives them: `min_stake_value`
+$10^{18}$ wei, `min_unstake_delay` 86400 s,
+`min_inclusion_rate_denominator` 10, `throttling_slack` 10, `ban_slack` 50,
+`refresh_seconds` 3600 and `throttled_entity_mempool_count` 4.
+`claim_memory`, `signed_proofs` and `verifies` exist to be varied: the
+experiments measure each value.
 
 ## Errors
 
@@ -71,8 +84,10 @@ Every AG-1 parameter is `eip-8288`'s. `claim_memory`, `signed_proofs` and
 | `ErrClaimUsed` | CG-5 |
 | `ErrClaimExpired` | CG-6 |
 | `ErrRelayAggregate` | CG-7 |
+| `ErrIssuerUnbonded`, `ErrEntityBanned`, `ErrEntityThrottled` | CG-11 |
 
-The rules name no errors; these codes are this repository's.
+The rules name no errors; these codes are this repository's. CG-11's last
+two are the codes `14-erc-8421.md` gives REPUTATION-010 and REPUTATION-020.
 
 ## Claims
 
@@ -80,8 +95,8 @@ The rules name no errors; these codes are this repository's.
 is its `sender`, `nonce_keys` and `nonce_seq`. A *claim* carries a `sender`,
 `nonce_keys`, `nonce_seq` and `epoch`, `valid`, whether the issuer's
 signature on it verifies, and a `salt` (MD-6); two claims with equal fields
-are one claim. Under `claims`, after FP-6 and before AG-6, the pool MUST
-reject:
+are one claim. Under `claims`, after FP-6, after CG-11 under `bond`, and
+before AG-6, the pool MUST reject:
 
 1. with `ErrClaimMissing`, a transaction with a dependency (AG-4) that
    carries no claim;
@@ -110,8 +125,8 @@ with the code, verifying no proof:
 1. under `signed_proofs`, every proof is `signed`, the proof its
    transaction's sender signed, else `ErrProofUnsigned`;
 2. for each transaction of the wrapper in order, the frame pool's admission
-   checks FP-2 to FP-10 with CG-2, CG-4 and CG-6 in their places and without
-   AG-6, each with its own code, and then CG-5.
+   checks FP-2 to FP-10 with CG-11 under `bond`, CG-2, CG-4 and CG-6 in their
+   places and without AG-6, each with its own code, and then CG-5.
 
 These checks change nothing in the pool; AG-6 offers the transactions to it
 afterwards, and it decides as it always does. **Source:** decision record
@@ -301,6 +316,105 @@ for one transaction's `max_cost`; it costs a node CG-9's check, the
 prefix's simulation, the paymaster's `VERIFY` frame included, and the
 proof's verification. Decision record 0057.
 
+## The bond
+
+**CG-11. A bond on the ticket paymaster.** Under `bond`, a transaction that
+carries a claim has a *ticket paymaster* when its payer, the resolved target
+of the frame that carries `APPROVE_PAYMENT` (FP-4's last prefix frame, the
+payer `14-erc-8421.md`'s AM-3 names), is not its sender; that payer is its
+ticket paymaster. A ticket paymaster is *bonded* when it is staked as AM-3
+stakes an entity, at the pool's head: its `code` is not empty, its `stake`
+is at least `min_stake_value`, its `unstake_delay` at least
+`min_unstake_delay`, and its `withdrawing` false (MD-2). For each ticket
+paymaster the node keeps AM-13's two counters, `seen` and `included`, which
+start as the node was given them, 0 unless said otherwise, and every
+`refresh_seconds` of the pool's time, counted from 0, are multiplied by 23
+and divided by 24, rounding down. With
+$m = \lfloor \mathit{seen} / \mathit{min\_inclusion\_rate\_denominator} \rfloor$,
+a ticket paymaster is `BANNED` if $m > \mathit{included} + \mathit{ban\_slack}$,
+`THROTTLED` if $\mathit{included} + \mathit{throttling\_slack} < m$ and it
+is not banned, and `ACTIVE` otherwise; the pool exposes its counters and its
+state as it does an entity's (MD-9). Under `claims` and `bond`, after FP-6
+and before CG-2's checks, the pool MUST reject a transaction with a ticket
+paymaster:
+
+1. with `ErrIssuerUnbonded`, if the paymaster is not bonded;
+2. with `ErrEntityBanned`, if it is `BANNED`;
+3. with `ErrEntityThrottled`, if it is `THROTTLED` and already the ticket
+   paymaster of `throttled_entity_mempool_count` pending transactions.
+
+The node adds 1 to a ticket paymaster's `seen` once for each transaction it
+is the ticket paymaster of: when a proof of the transaction fails at AG-5's
+step 5 after CG-3, as CG-4 records, or when the pool admits it, whichever
+comes first. It adds 1 to its `included` when
+FP-15's step 1 removes a pending transaction it is the ticket paymaster of,
+which the model reads as its inclusion. A counter is each node's own.
+**Source:** `14-erc-8421.md`, AM-3 [STAKING-010] for the stake and AM-13
+[REPUTATION-010, REPUTATION-020] for the counters, the states and the
+refusals, read for one entity, the ticket paymaster; decision record 0062,
+which modelled them in the simulator, and experiment 26, which priced them.
+*Interpretation*, decision record 0064:
+
+- the ticket paymaster is the payer. The template's `VERIFY` frame accepts
+  only the scope `PAYMENT` and approves payment (CG-10's $T$, kohaku-rs at
+  `eea02a3`, `TicketPaymaster.yul`), so every transaction that carries a
+  real ticket is paid by its ticket paymaster, and never by its sender,
+  whose own frame must approve execution. A claim the model gives on a
+  transaction that pays for itself (MD-6) stands for a ticket whose
+  paymaster is not modelled, and CG-11 reads nothing for it;
+- the stake is required. ERC-8421 lets an unstaked payer in under
+  REPUTATION-220; a ticket paymaster without one would let a self-issuer
+  replace a banned paymaster for the price of a deployment;
+- the checks come before CG-2's, so a node refuses an unbonded or banned
+  paymaster's ticket without checking its signature (CG-9);
+- `seen` counts each transaction once, after it has passed the bond, the
+  ticket and the prefix: a junk proof's when its proof fails, since it is
+  never admitted, and any other at its admission, as AM-13 counts. A
+  transaction whose count bans its paymaster is therefore admitted, and the
+  next is refused. ERC-8421 counts a replacement against the payer it
+  changes (REPUTATION-040); here a replacement is a new transaction and
+  counts once, as any other;
+- a banned paymaster's pending transactions stay pending. AM-13 removes
+  them at `reset`; experiment 26 measured the bond without that removal,
+  under which a holder of an honest issuer's tickets who has it banned
+  would also drop the issuer's pending spends.
+
+Under `claim-gated`, FP-11 already holds a ticket paymaster, which is not
+canonical, to `max_pending_noncanonical` pending transactions, 1, fewer than
+`throttled_entity_mempool_count`; step 3 refuses nothing until a profile
+lets a paymaster pay for more, and the stake and the ban are what bind.
+
+What a junk proof costs under the bond, read from these clauses and
+measured in experiment 26 (`experiments/26-ticket-bond/README.md`, "What it
+shows"), which ran the same rules in the simulator with the descriptor's
+parameters:
+
+- **A self-issuer stakes each paymaster.** A node that has counted none of
+  a paymaster's transactions included bans it after
+  $(50 + 1) \cdot 10 = 510$ junk proofs under its tickets. Against one
+  staked paymaster, every node banned it at 1,584 s, after 510 failed
+  proofs there, and the hourly refresh reopened it for 22 more. Over the run
+  that is 15,960 junk proofs against 68,520 under version 4, for
+  $10^{18}$ wei locked 1.08 ETH-days. With four staked paymasters the
+  self-issuer kept 1,180 junk proofs a node in the first hour and 911 in
+  the second: the bond prices junk at a stake per paymaster, and does not
+  stop a self-issuer with capital.
+- **An unstaked paymaster costs a node nothing.** Its tickets are refused
+  before the signature, the prefix or the proof.
+- **A busy honest issuer cannot be closed** by a holder of its tickets: at 8
+  or 64 junk proofs an epoch, no node throttled or banned it, since its
+  `included` grows with its traffic.
+- **A small honest issuer can.** At 64 junk proofs an epoch every node
+  throttled one selling 4 tickets an epoch at 1,541 s, and the same rate,
+  sustained, bans it after 2.03 hours; 8 an epoch never throttles it.
+- **The stake weighs on a small issuer.** $10^{18}$ wei is 1,000 tickets'
+  face value in the experiment: 1.11 days of the small issuer's sales, and
+  0.07 days of a busy one's, locked from its first ticket to the end of the
+  unstake delay after its last.
+
+No honest spend was refused, and no honest delay moved, in any of
+experiment 26's rows.
+
 ## Not modelled
 
 - R5: whatever admission reads is carried in the transaction or owned by
@@ -316,7 +430,18 @@ proof's verification. Decision record 0057.
   the claim as given (MD-6).
 - A memory of the paymasters under whose tickets a proof failed, which would
   price a self-issuer's junk proofs in deployments (CG-10); `claim_memory`
-  has no such value.
+  has no such value. Experiment 25 priced it as issuer memory, and a node's
+  list of issuers beside it; the bond of CG-11 was chosen over both
+  (decision record 0064).
+- How a node reads a paymaster's stake on a chain: from ERC-8421's staking
+  registry, `getDepositInfo` (AM-3). The model keeps the registry's answer
+  on the account (MD-2), and `11-surface.md` reads no registry, so a node
+  run against a chain checks claims without `bond`.
+- Staking itself: the deposit, the unstake delay's unlock, the withdrawal
+  and their gas. CG-11 reads only whether a paymaster is staked at the head.
+- A reputation shared between nodes. Each node counts what it saw, so a
+  self-issuer that reaches fewer nodes is banned at fewer, and so is an
+  honest issuer whose tickets a griefer spends at only some.
 - What a ticket paymaster's `VERIFY` frame costs, and how many of its
   transactions a pool holds at once. A paymaster that checks a ticket on
   EIP-2537's precompiles spent 122,006 gas in its frame on the Hegota
@@ -351,3 +476,8 @@ proof's verification. Decision record 0057.
   2, the node's set of keys for each epoch, and its steps 3 and 4 become 2
   and 3. CG-9's and CG-10's vectors change with it; the vectors of CG-2 to
   CG-8 hold unchanged and now say version 4.
+- **Version 5.** CG-1 gains `bond`, true under `claim-gated`, and CG-11
+  puts ERC-8421's stake and reputation on the ticket paymaster. Every
+  transaction of the earlier vectors pays for itself, so CG-11 reads
+  nothing for it: the vectors of CG-2 to CG-10 hold unchanged and now say
+  version 5, and CG-11's are new.

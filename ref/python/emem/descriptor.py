@@ -155,6 +155,9 @@ CLAIMS = {
     "CG-9": _m(),
     "CG-10": _m("rule", template_length=(claimticket.TEMPLATE_LENGTH,),
                 template_keccak=("0x" + claimticket.TEMPLATE_KECCAK.hex(),)),
+    "CG-11": _m("rule", ["ErrIssuerUnbonded", "ErrEntityBanned", "ErrEntityThrottled"], min_stake_value=AMOUNT,
+                min_unstake_delay=INT, min_inclusion_rate_denominator=INT, throttling_slack=INT, ban_slack=INT,
+                refresh_seconds=INT, throttled_entity_mempool_count=INT),
 }
 _ERC_CODES = {
     "PREFIX-010": ["ErrFrameExpiryNotFirst", "ErrFrameNoPayer", "ErrFrameUnrecognizedPrefix"],
@@ -330,8 +333,9 @@ def compile_config(d: Descriptor) -> FramePoolConfig:
             changes[p] = frozenset(v) if p == "precompiles" else v
     if "AG-7" in eff:
         changes["aggregation_interval"] = eff["AG-7"][0]["aggregation_interval_ms"] / 1000
-    if "STAKING-010" in eff:
-        changes["min_stake_value"] = int(eff["STAKING-010"][0]["min_stake_value"])
+    for name in ("STAKING-010", "CG-11"):
+        if name in eff:
+            changes["min_stake_value"] = int(eff[name][0]["min_stake_value"])
     if any(name in eff for name in ERC):
         name = "erc-8421"
         changes["ruleset"] = "erc-8421"
@@ -343,4 +347,5 @@ def compile_config(d: Descriptor) -> FramePoolConfig:
         name = "eip-8141"
     changes["dependency_frames"] = "AG-2" in eff
     changes["claims"] = "CG-2" in eff
+    changes["bond"] = "CG-11" in eff
     return EIP_8141.with_(name=name, **changes)

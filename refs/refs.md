@@ -728,7 +728,10 @@ says is checked against the primary source before it is relied on.
   deployment, its 1,418 bytes of creation code and key through the
   deterministic deployment proxy `0x4e59b44847b379578588920ca78fbf26c0b4956c`
   under a fresh salt, at block 482,799 of the testnet: 2,443,085 gas, read
-  2026-10-20.
+  2026-10-20. For CG-11 and decision record 0064: `TicketPaymaster.yul`'s
+  `VERIFY` branch, which fails unless the frame's scope is `PAYMENT`
+  ("scope PAYMENT only") and then approves payment and nothing else, so a
+  ticket paymaster is its transaction's payer, read 2026-10-20.
 
 Before this repository was published on 2026-10-20, some readings and
 measurements it uses came from research notes and benchmarks that are not

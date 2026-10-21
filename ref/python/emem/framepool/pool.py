@@ -19,8 +19,17 @@ from ..reserver import Reserver
 from ..tx import FrameTx, replaces
 from .config import EIP_8141, FramePoolConfig
 from .matcha import admission_gas, charge
-from .prefix import (Prefix, Simulation, check_expiring, check_nonce, check_static, dep_value, expiring, seen_slot,
-                     simulate, static_payer)
+from .prefix import (Prefix, Simulation, analyse, check_expiring, check_nonce, check_static, dep_value, expiring,
+                     seen_slot, simulate, static_payer)
+
+ACTIVE, THROTTLED, BANNED_STATE = "ACTIVE", "THROTTLED", "BANNED"  # AM-13's states
+
+
+def staked(addr: str, state: State, cfg: FramePoolConfig) -> bool:
+    """AM-3 [STAKING-010], and CG-11's bonded: never a default-code account."""
+    stake, delay, withdrawing = state.stake(addr)
+    return state.code(addr) != "" and stake >= cfg.min_stake_value and delay >= cfg.min_unstake_delay \
+        and not withdrawing
 
 
 @dataclass
@@ -72,6 +81,10 @@ class FramePool:
         self.refused_claims: dict = {}  # CG-4 under `claim`: by claim, the same
         self.used_claims: set = set()  # CG-5: the claims a node has verified a proof under
         self.expired_claims: dict = {}  # CG-6: by claim, the last epoch it is refused in
+        # AM-13's counters, kept for ERC-8421's entities and, under `bond`, for ticket paymasters (CG-11)
+        self.counters: dict[str, list[int]] = {}  # by address, [seen, included]
+        self.refreshed = 0  # how many refreshes the pool's time has passed
+        self._counted: set[str] = set()  # CG-11: the transactions counted in a ticket paymaster's `seen`
 
     # --- the pool interface (MD-8) --------------------------------------------
 
@@ -282,11 +295,13 @@ class FramePool:
             raise TxError(E.ErrClaimUsed)
 
     def proof_verified(self, tx: FrameTx, failed: bool) -> None:
-        """CG-5, and CG-4 when `failed`: a mode 0 wrapper that passed CG-3 reached AG-5's step 5, and a proof
-        of a triple `tx` declares did not verify."""
+        """CG-5, and CG-4 and CG-11's count when `failed`: a mode 0 wrapper that passed CG-3 reached AG-5's step
+        5, and a proof of a triple `tx` declares did not verify."""
         claim = tx.claim
         if claim is None:
             return
+        if failed:
+            self._see(tx)  # CG-11
         self.used_claims.add(claim)
         memory = self.config.claim_memory
         if failed and memory == "slot":
@@ -295,12 +310,13 @@ class FramePool:
             self.refused_claims[claim] = claim.epoch
 
     def _check_claim(self, tx: FrameTx) -> None:
-        """CG-2, then CG-4, then CG-6, as the pool runs them after FP-6."""
+        """CG-11 under `bond`, then CG-2, then CG-4, then CG-6, as the pool runs them after FP-6."""
         claim = tx.claim
         if claim is None:
             if dependencies(tx, self.config):
                 raise TxError(E.ErrClaimMissing)
             return
+        self._check_bond(tx)
         if not claim.valid:
             raise TxError(E.ErrClaimInvalid)
         if claim.slot != tx.slot:
@@ -314,6 +330,73 @@ class FramePool:
             raise TxError(E.ErrClaimRefused)
         if self.expired_claims.get(claim, -1) >= epoch:
             raise TxError(E.ErrClaimExpired)
+
+    # --- AM-13's reputation, and CG-11's bond on the ticket paymaster ----------
+
+    def give(self, addr: str, seen: int, included: int) -> None:
+        """AM-13: the counters a node was given for `addr`."""
+        self.counters[addr] = [seen, included]
+
+    def reputation(self, addr: str) -> dict:
+        """AM-13: an entity's counters and state (MD-9)."""
+        seen, included = self.counters.get(addr, (0, 0))
+        return {"seen": seen, "included": included, "status": self.state_of(addr)}
+
+    def state_of(self, addr: str) -> str:
+        cfg = self.config
+        seen, included = self.counters.get(addr, (0, 0))
+        m = seen // cfg.min_inclusion_rate_denominator
+        if m > included + cfg.ban_slack:
+            return BANNED_STATE
+        if included + cfg.throttling_slack < m:
+            return THROTTLED
+        return ACTIVE
+
+    def _bump(self, addr: str, seen: int = 0, included: int = 0) -> None:
+        c = self.counters.setdefault(addr, [0, 0])
+        c[0], c[1] = max(0, c[0] + seen), max(0, c[1] + included)
+
+    def _refresh(self, now: float) -> None:
+        """AM-13 [REPUTATION-010]: every `refresh_seconds` of the pool's time, counted from 0."""
+        due = int(now // self.config.refresh_seconds)
+        while self.refreshed < due:
+            for c in self.counters.values():
+                c[0], c[1] = c[0] * 23 // 24, c[1] * 23 // 24
+            self.refreshed += 1
+
+    def ticket_paymaster(self, tx: FrameTx) -> str | None:
+        """CG-11: the payer of a transaction that carries a claim, when that is not its sender."""
+        if not self.config.bond or tx.claim is None:
+            return None
+        prefix = analyse(tx, self.config)
+        if prefix is None:
+            return None
+        last = prefix.frames[-1]
+        payer = last.target if last.target is not None else tx.sender
+        return None if payer == tx.sender else payer
+
+    def _check_bond(self, tx: FrameTx) -> None:
+        """CG-11's three refusals, in order."""
+        paymaster = self.ticket_paymaster(tx)
+        if paymaster is None:
+            return
+        cfg = self.config
+        if not staked(paymaster, self.state, cfg):
+            raise TxError(E.ErrIssuerUnbonded)
+        status = self.state_of(paymaster)
+        if status == BANNED_STATE:
+            raise TxError(E.ErrEntityBanned)
+        if status == THROTTLED and sum(1 for e in self.entries.values()
+                                       if self.ticket_paymaster(e.tx) == paymaster) >= \
+                cfg.throttled_entity_mempool_count:
+            raise TxError(E.ErrEntityThrottled)
+
+    def _see(self, tx: FrameTx) -> None:
+        """CG-11: `seen`, once for each transaction, when its proof fails or when it is admitted."""
+        paymaster = self.ticket_paymaster(tx)
+        if paymaster is not None and tx.hash not in self._counted:
+            self._counted.add(tx.hash)
+            self._bump(paymaster, seen=+1)
 
     # --- admission ------------------------------------------------------------
 
@@ -473,7 +556,8 @@ class FramePool:
             raise TxError(E.ErrFrameLoadUnderpriced)
 
     def _expire(self, now: float) -> None:
-        """MA-8, oldest first."""
+        """AM-13's refresh, then MA-8, oldest first."""
+        self._refresh(now)
         if not self.matcha:
             return
         ages = self._ages
@@ -549,6 +633,7 @@ class FramePool:
                 self.claims.setdefault(tx.sender, Counter()).update(e.cls)
             heapq.heappush(self._ages, (e.admitted, e.seq, tx.hash))
         self.reserver.hold(tx.sender, self)
+        self._see(tx)  # CG-11
         self.log.append(("pending", tx, "admitted"))
 
     def _remove(self, tx_hash: str, reason: str, release: bool = True, account: bool = True) -> None:
@@ -582,6 +667,8 @@ class FramePool:
         if account:
             self._account(e, -1)
         self._index(e, -1)
+        if reason == "stale_nonce" and tx.hash in self._counted:  # CG-11: included
+            self._bump(self.ticket_paymaster(tx), included=+1)
         if self.config.claims and tx.claim is not None and reason != "stale_nonce":  # CG-6
             self.expired_claims[tx.claim] = max(self.expired_claims.get(tx.claim, tx.claim.epoch), tx.claim.epoch)
         self.log.append(("dropped", tx, reason))
