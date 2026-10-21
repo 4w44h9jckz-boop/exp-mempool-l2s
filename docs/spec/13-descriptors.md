@@ -1,7 +1,9 @@
 # 13. Descriptors: a ruleset as a file a node loads
 
-Version 2, 2026-10-20. Version 2, the same day, adds the module `CG-11`,
-the bond of `10-claim-gated-admission.md` version 5.
+Version 3, 2026-10-21. Version 2, 2026-10-20, adds the module `CG-11`,
+the bond of `10-claim-gated-admission.md` version 5; version 3 adds the
+module `CG-12`, the binding of its version 6, and the bound template to
+`CG-10`.
 
 **Status: proposal.** EIP-8141 fixes one public mempool's rules, and
 ERC-8421 lets nodes agree on others: "Each alternative mempool is identified
@@ -130,8 +132,9 @@ the one those clauses give.
 | `CG-7` | `verifies` (boolean) | rule |
 | `CG-8` | `namespace` (string) | rule |
 | `CG-9` | none | rule |
-| `CG-10` | `template_length` (integer), `template_keccak` (string) | rule |
+| `CG-10` | `template_length` (integer), `template_keccak` (string), `bound_template_length` (integer, or `null` for none), `bound_template_keccak` (string, or `null` for none) | rule |
 | `CG-11` | `min_stake_value` (amount), `min_unstake_delay` (integer), `min_inclusion_rate_denominator` (integer), `throttling_slack` (integer), `ban_slack` (integer), `refresh_seconds` (integer), `throttled_entity_mempool_count` (integer) | rule |
+| `CG-12` | none | rule |
 
 A **core** module is part of every frame pool this repository models; a
 **rule** module may be absent, or replaced (DS-6). A module refuses with the
@@ -214,3 +217,15 @@ and so does this document.
   of DS-1 to DS-8 hold unchanged and now say version 2, but for the
   identifier and the profile of `claim-gated.json`, which change with the
   file (decision record 0064).
+- **Version 3.** The module `CG-12`, the binding of
+  `10-claim-gated-admission.md` version 6, with no parameters, and two
+  parameters of `CG-10`, the bound template's length and keccak256, `null`
+  while none is fixed. DS-6 step 5 requires `CG-12` wherever the other `CG`
+  modules are, so `claim-gated.json` gains it, and `null` for both of
+  `CG-10`'s new parameters; its identifier changes (DS-8). Both
+  parameters must be `null` together or set together, else
+  `ErrDescriptorParams`. The vectors of DS-1 to DS-8 hold and now say
+  version 3, but for the identifier, the profile and the module count of
+  `claim-gated.json`, and for three descriptors of DS-6's vectors that
+  write `CG-10` out, which gain its two parameters so as to fail where they
+  failed before; DS-4 gains three cases (decision record 0067).

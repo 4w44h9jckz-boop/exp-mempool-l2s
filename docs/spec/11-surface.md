@@ -1,7 +1,8 @@
 # 11. The surface: real frame transactions in and out of the pool
 
-Version 3, 2026-10-20. Version 1 did not decode a recent-root verifier frame's
-tuples; version 2 did not read a claim; see the version notes at the end.
+Version 4, 2026-10-21. Version 1 did not decode a recent-root verifier frame's
+tuples; version 2 did not read a claim; version 3 did not read whether a
+claim is bound to its transaction; see the version notes at the end.
 
 The model has no RLP, no signatures and no EVM (`00-model.md`). This document
 specifies the layer around a frame pool that a node needs to take real
@@ -117,7 +118,7 @@ take their defaults.
 | `zero_bytes` | the zero bytes among every frame's `data`, every signature's `signer`, `msg` and `signature`, and $\mathit{rlp}(\mathit{nonce\_keys}) \Vert \mathit{rlp}(\mathit{nonce\_seq})$, which are FEE-4's $D$ |
 | `label` | the transaction's hash |
 | `verdict` | SF-4 |
-| `claim` | under a frame profile with `claims` (CG-1), CG-10's claim, with the code at the pool's head of each `VERIFY` frame's target as the execution client answers it (`eth_getCode`): its `sender` written as above, `nonce_keys` and `nonce_seq` the transaction's, `epoch` and `salt` (`0x` and 64 lowercase hexadecimal digits) from the ticket's frame, and `valid` by CG-9; a ticket's frame whose data is not 168 bytes gives `epoch` 0, an empty `salt` and `valid` false; absent when no frame carries a ticket, and under any other profile |
+| `claim` | under a frame profile with `claims` (CG-1), CG-10's claim, with the code at the pool's head of each `VERIFY` frame's target as the execution client answers it (`eth_getCode`): its `sender` written as above, `nonce_keys` and `nonce_seq` the transaction's, `epoch` and `salt` (`0x` and 64 lowercase hexadecimal digits) from the ticket's frame, `binder` from a bound ticket paymaster's frame, written as `sender` is, `valid` by CG-9, and `bound` by CG-12 over the signature hash of the bytes received; a ticket's frame whose data is not of its paymaster's length, 168 or 188 bytes, gives `epoch` 0, an empty `salt`, no `binder` and `valid` and `bound` false; absent when no frame carries a ticket, and under any other profile |
 
 The transaction's **hash** is $\mathit{keccak256}$ of the bytes received,
 the hash the chain gives it, and it is the hash FP-2, MD-8's `verdicts` and
@@ -152,7 +153,8 @@ take the outcome of a transaction's validation prefix from an execution
 client that does, simulated against the pool's head, and MUST record it as
 the transaction's `verdict` before `add`. It MUST NOT ask the client about a
 transaction that SF-2 or FP-2 to FP-7 refuse, or, under a frame profile with
-`claims`, that CG-2, CG-4 or CG-6 refuse after FP-6: those checks read no
+`claims`, that CG-2, with CG-12 under `binding`, CG-4 or CG-6 refuse after
+FP-6: those checks read no
 state except the sender's nonce sequences and the code SF-3's `claim` reads,
 and the EIP asks a node to "perform all available structural and stateless
 checks before sender-state access". Running CG-2, CG-4 and CG-6 before the
@@ -331,3 +333,14 @@ item 42 asks. A run passes or fails on these steps:
   profile without `claims` nothing changes, and every vector of version 2
   holds and now says version 3. *Interpretation*, decision records 0057
   and 0058.
+- **Version 4.** SF-3's `claim` gains a `binder`, read from a bound ticket
+  paymaster's frame, and `bound`, CG-12's verdict
+  (`10-claim-gated-admission.md` version 6): the transaction's signature
+  hash is computed from the bytes received, as EIP-8141's
+  `compute_sig_hash` defines it, and the binder's `secp256k1` signature is
+  checked over it before the client is asked. A claim read from a ticket
+  paymaster's 168 bytes has no binder and is not bound. Every vector of
+  version 3 holds and now says version 4, its claims with `bound` false
+  where they come from a ticket; SF-3 and SF-5 gain a bound ticket and a
+  copy of it with a higher priority fee, which SF-5 refuses before the
+  client is asked (decision record 0067).

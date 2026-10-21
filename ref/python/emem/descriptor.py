@@ -96,7 +96,7 @@ def identifier(value) -> str:
 
 # --- DS-4: the modules ----------------------------------------------------------------------------------
 
-INT, INT_OR_NULL, BOOL, STR, STRS, AMOUNT = "int", "int|null", "bool", "str", "str[]", "amount"
+INT, INT_OR_NULL, BOOL, STR, STR_OR_NULL, STRS, AMOUNT = "int", "int|null", "bool", "str", "str|null", "str[]", "amount"
 
 
 @dataclass(frozen=True)
@@ -154,10 +154,12 @@ CLAIMS = {
     "CG-8": _m("rule", namespace=(claimticket.NAMESPACE.decode("ascii"),)),
     "CG-9": _m(),
     "CG-10": _m("rule", template_length=(claimticket.TEMPLATE_LENGTH,),
-                template_keccak=("0x" + claimticket.TEMPLATE_KECCAK.hex(),)),
+                template_keccak=("0x" + claimticket.TEMPLATE_KECCAK.hex(),), bound_template_length=INT_OR_NULL,
+                bound_template_keccak=STR_OR_NULL),
     "CG-11": _m("rule", ["ErrIssuerUnbonded", "ErrEntityBanned", "ErrEntityThrottled"], min_stake_value=AMOUNT,
                 min_unstake_delay=INT, min_inclusion_rate_denominator=INT, throttling_slack=INT, ban_slack=INT,
                 refresh_seconds=INT, throttled_entity_mempool_count=INT),
+    "CG-12": _m("rule", ["ErrClaimUnbound"]),
 }
 _ERC_CODES = {
     "PREFIX-010": ["ErrFrameExpiryNotFirst", "ErrFrameNoPayer", "ErrFrameUnrecognizedPrefix"],
@@ -217,6 +219,8 @@ def _type_ok(t, v) -> bool:
         return isinstance(v, bool)
     if t == STR:
         return isinstance(v, str)
+    if t == STR_OR_NULL:
+        return v is None or isinstance(v, str)
     if t == STRS:
         return isinstance(v, list) and all(isinstance(x, str) for x in v)
     if t == AMOUNT:
@@ -233,6 +237,8 @@ def check_modules(rules: dict) -> None:
         params = rules[name]
         if set(params) != set(module.params) or not all(_type_ok(t, params[p]) for p, t in module.params.items()):
             raise DescriptorError("ErrDescriptorParams", name)
+        if name == "CG-10" and (params["bound_template_length"] is None) != (params["bound_template_keccak"] is None):
+            raise DescriptorError("ErrDescriptorParams", name)  # the bound template is named whole, or not at all
 
 
 # --- DS-5 and DS-6 --------------------------------------------------------------------------------------
@@ -348,4 +354,5 @@ def compile_config(d: Descriptor) -> FramePoolConfig:
     changes["dependency_frames"] = "AG-2" in eff
     changes["claims"] = "CG-2" in eff
     changes["bond"] = "CG-11" in eff
+    changes["binding"] = "CG-12" in eff
     return EIP_8141.with_(name=name, **changes)

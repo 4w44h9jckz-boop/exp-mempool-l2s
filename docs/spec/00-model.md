@@ -1,6 +1,6 @@
 # 00. The model: accounts, heads, transactions, the pool interface, fees
 
-Version 11, 2026-10-20. Version 1 left the EIP-8250 nonce fields out of
+Version 12, 2026-10-21. Version 1 left the EIP-8250 nonce fields out of
 FEE-4 and had no `finalize` operation, version 2 had no dependency frames,
 version 3 had no sealed transactions, version 4 gave an authorization no
 nonce of its own, version 5 gave a frame transaction no admission claim,
@@ -8,7 +8,8 @@ version 6 did not say how much of a transaction's gas is state gas, and
 version 7 had no transaction that takes value from accounts that signed for
 it, version 8 priced every calldata byte as non-zero and had no client
 verdict, version 9 had no stake and no storage association, and version 10
-put every dependency frame at mode 3; see the version notes at the end.
+put every dependency frame at mode 3, and version 11 gave a claim no
+binder; see the version notes at the end.
 
 Every other document in this directory talks about the objects defined here.
 The model keeps exactly the fields a transaction pool reads and drops the rest:
@@ -113,8 +114,9 @@ writes of the frames after the prefix), `gas_used` (default: its
 default: the sum of its frames' `state_gas`, which FEE-4 counts in
 `max_gas`), and `claim` (default absent), an admission claim of
 `10-claim-gated-admission.md` carrying `sender`, `nonce_keys` (default
-`(0,)`), `nonce_seq`, `epoch`, `valid` (default true) and `salt` (default
-empty), which only that document's profile reads. A **frame** carries the EIP-8141 fields
+`(0,)`), `nonce_seq`, `epoch`, `valid` (default true), `salt` (default
+empty), `binder` (default empty: none) and `bound` (default true), which
+only that document's profile reads. A **frame** carries the EIP-8141 fields
 `mode` (0 `DEFAULT`, 1 `VERIFY`, 2 `SENDER`, and AG-1's `dep_frame_mode`, 3 or
 4, for an EIP-8288 dependency frame, `05-aggregation.md`), `flags`, `target` (absent means `sender`),
 `exec_gas` and `state_gas` (the two `limits`), `value` and `data_size`; for a
@@ -367,3 +369,8 @@ transaction that pays it says so in its frame's `state_gas` and its
   under `eip-8288`, as before, and 4 under `eip-8288-master` (decision record
   0063). Under every profile but that one nothing changes, and every vector of
   this document holds and now says version 11.
+- **Version 12.** MD-6's claim carries a `binder`, the address of the
+  one-time key its ticket names, and `bound`, whether that key signed the
+  transaction (`10-claim-gated-admission.md` version 6, CG-12). Their
+  defaults, no binder and `bound` true, leave a claim's hash (MD-7) as it
+  was, so every vector of this document holds and now says version 12.

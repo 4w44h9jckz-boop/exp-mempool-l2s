@@ -30,7 +30,8 @@ from emem.focil import admitted  # noqa: E402
 from emem.recentroots import source_id, write_root  # noqa: E402
 from emem.sealed import fees  # noqa: E402
 from emem import lucidkeys  # noqa: E402
-from emem.surface import SURFACE_PROFILES, Surface, address_form, decode, verdict  # noqa: E402
+from emem.surface import (SURFACE_PROFILES, Surface, _parse, address_form, bound_template, decode,  # noqa: E402
+                          sig_hash, ticket, verdict)
 from emem.errors import TxError  # noqa: E402
 from emem.replay import replay  # noqa: E402
 
@@ -453,7 +454,8 @@ def _model_json(tx: FrameTx) -> dict:
             "signatures": [{"scheme": s.scheme, "signer": s.signer, "canonical_msg": s.canonical_msg,
                             "valid": s.valid, "length": s.length} for s in tx.signatures],
             "claim": None if tx.claim is None else {"epoch": tx.claim.epoch, "salt": tx.claim.salt,
-                                                    "valid": tx.claim.valid}}
+                                                    "binder": tx.claim.binder or None, "valid": tx.claim.valid,
+                                                    "bound": tx.claim.bound}}
 
 
 def run_surface(case: dict) -> None:
@@ -547,23 +549,37 @@ def run_surface(case: dict) -> None:
 def _ticket_claim(d: dict) -> TicketClaim:
     return TicketClaim(int(d["chain_id"], 16), int(d.get("epoch", "0x0"), 16), bytes.fromhex(d["sender"][2:]),
                        int(d["nonce_seq"], 16), tuple(int(k, 16) for k in d["nonce_keys"]),
-                       bytes.fromhex(d.get("salt", "0x")[2:]))
+                       bytes.fromhex(d.get("salt", "0x")[2:]), bytes.fromhex(d.get("binder", "0x")[2:]))
+
+
+def _ticket_got(found) -> dict:
+    if found is None:
+        return {"claim": None}
+    (e, salt, binder, issuer), ok = found[:2]
+    hx = lambda b: None if b is None else "0x" + b.hex()  # noqa: E731
+    return {"claim": {"epoch": None if e is None else hex(e), "salt": hx(salt), "binder": hx(binder),
+                      "issuer": hx(issuer)}, "valid": ok}
 
 
 def run_claim_ticket(case: dict) -> None:
-    """`docs/spec/10-claim-gated-admission.md`, CG-8 to CG-10: a ticket's message, its verdict, and where it rides."""
+    """`docs/spec/10-claim-gated-admission.md`, CG-8 to CG-10 and CG-12: a ticket's message, its verdict, where it
+    rides, and whether its transaction is bound to it."""
+    cfg = PROFILES["claim-gated"].with_(**case.get("config", {}).get("frame", {}))
+    codes = {bytes.fromhex(a[2:]): bytes.fromhex(c[2:]) for a, c in case.get("codes", {}).items()}
+    if "raw" in case:  # CG-12, from the bytes of a transaction
+        raw = bytes.fromhex(case["raw"][2:])
+        t = _parse(raw[1:], "keyed")
+        found = ticket(t, t["nonce_keys"], codes, cfg, raw, "keyed")
+        got = {"sig_hash": "0x" + sig_hash(raw).hex(), **_ticket_got(found)}
+        if found is not None:
+            got["bound"] = found[2]
+        _compare(case["expect"], got, "claim_ticket")
+        return
     if "frames" in case:  # CG-10
-        codes = {bytes.fromhex(a[2:]): bytes.fromhex(c[2:]) for a, c in case["codes"].items()}
         frames = [TicketFrame(f["mode"], bytes.fromhex(f["target"][2:]), bytes.fromhex(f["data"][2:]))
                   for f in case["frames"]]
-        found = ticket_carried(_ticket_claim(case["tx"]), frames, codes)
-        if found is None:
-            got = {"claim": None}
-        else:
-            (e, salt, issuer), ok = found
-            got = {"claim": {"epoch": None if e is None else hex(e), "salt": None if salt is None else "0x" + salt.hex(),
-                             "issuer": "0x" + issuer.hex()}, "valid": ok}
-        _compare(case["expect"], got, "claim_ticket")
+        _compare(case["expect"], _ticket_got(ticket_carried(_ticket_claim(case["tx"]), frames, codes,
+                                                            bound_template(cfg))), "claim_ticket")
         return
     claim = _ticket_claim(case["claim"])
     m = ticket_message(claim)

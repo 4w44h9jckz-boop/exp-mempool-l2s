@@ -45,6 +45,12 @@ says is checked against the primary source before it is relied on.
   Sections: Constants, Frame Transaction, Constraints, Signature Validation,
   Expiry Verifier Frame, Behavior, Gas Accounting, Default code, `APPROVE`,
   Mempool (all subsections). Used for `docs/spec/02-frame-pool.md`, MD-6, FEE-4.
+  Read again at the same commit on 2026-10-21: Transaction Signatures,
+  Signature Hash (`compute_sig_hash`), Signature Validation
+  (`validate_signature` for `SECP256K1`), Introspection (`TXPARAM` and
+  `SIGPARAM`), and Security Considerations, "Arbitrary Signature
+  Malleability". Used for CG-12 of `docs/spec/10-claim-gated-admission.md`
+  version 6, SF-3 version 4 and decision record 0067.
 - **EIP-8250, Keyed Nonces for Frame Transactions**, Draft, same commit, read
   2026-10-07. Sections: Mempool, Rationale. Used for FP-7 and FP-12. Read
   again the same day for experiment 02: Constants
@@ -609,6 +615,12 @@ says is checked against the primary source before it is relied on.
   (`MinSig`, `G1_MESSAGE`) and `utils/src/lib.rs` (`union_unique`). Run the
   same day, outside this repository, to sign every ticket in
   `conformance/vectors/claim-gated/`. Used for CG-9 and decision record 0056.
+  Run again from the same clone on 2026-10-21, through a 50-line program
+  outside this repository that calls `sign_message` and `verify_message`
+  for `MinSig` and writes both points in EIP-2537's encoding, to sign the
+  152-byte messages of CG-8 version 6 in `cg-08-ticket-message.json`,
+  `cg-10-ticket-carriage.json` and `cg-12-bound-copies.json`. Used for
+  decision record 0067.
 - **EIP-2537, Precompile for BLS12-381 curve operations**, Final, at
   `258836f9`, read 2026-10-20: "Fine points and encoding of base elements"
   (each field element in 64 bytes, its top 16 zero and below the modulus;
@@ -702,7 +714,14 @@ says is checked against the primary source before it is relied on.
   encoding of each fixture used in `conformance/vectors/surface/` hashes to
   the chain's hash; `test/encode.test.ts` (ethrex's golden vector);
   `exp-frames/experiments/19-mempool-rules/README.md` (ethrex's refusal texts). Used for
-  `docs/spec/11-surface.md` and its vectors.
+  `docs/spec/11-surface.md` and its vectors. Read again 2026-10-21 at the
+  same commit: `exp-frames/experiments/20-signature-service/README.md`, contracts that
+  read the protocol's `secp256k1` and `p256` entries with `SIGPARAM` on the
+  testnet, with mined transactions; and `src/frametx/encode.ts` and
+  `sign.ts` (`frameSigHash`, `signFrameTx`), run outside this repository to
+  make every transaction, signature hash and `secp256k1` signature of
+  `conformance/vectors/claim-gated/cg-12-bound-copies.json`. Used for CG-12
+  and decision record 0067.
 - **exp-frames** (branch `claude/nifty-einstein-llp9cd` at `f0749cb`, read
   2026-10-20): `exp-frames/experiments/36-blind-tickets/`, blind tickets issued by a
   threshold committee and paid for in a paymaster's `VERIFY` frame on the

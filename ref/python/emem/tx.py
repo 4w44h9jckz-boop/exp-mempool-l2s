@@ -22,6 +22,8 @@ def _canonical(value):
     if hasattr(value, "__dataclass_fields__"):
         return (type(value).__name__,) + tuple(_canonical(getattr(value, f.name)) for f in fields(value)
                                                if not (f.metadata.get("omit_none") and getattr(value, f.name) is None)
+                                               and not (f.metadata.get("omit_default")
+                                                        and getattr(value, f.name) == f.default)
                                                and not f.metadata.get("not_identity"))
     return value
 
@@ -178,7 +180,9 @@ class Signature:
 
 @dataclass(frozen=True)
 class Claim:
-    """MD-6, CG-2: an admission claim for one slot in one epoch; `valid` says whether its issuer's signature verifies."""
+    """MD-6, CG-2: an admission claim for one slot in one epoch; `valid` says whether its issuer's signature verifies,
+    and `bound` whether its binder signed the transaction (CG-12). At their defaults, `binder` and `bound` leave the
+    hash as it was (MD-7, version 12)."""
 
     sender: str
     nonce_seq: int
@@ -186,6 +190,8 @@ class Claim:
     nonce_keys: tuple[int, ...] = (0,)
     valid: bool = True
     salt: str = ""
+    binder: str = field(default="", metadata={"omit_default": True})
+    bound: bool = field(default=True, metadata={"omit_default": True})
 
     @property
     def slot(self) -> tuple:

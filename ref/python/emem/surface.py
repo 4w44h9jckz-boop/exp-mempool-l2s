@@ -18,7 +18,7 @@ from .errors import TxError
 from .framepool.config import FramePoolConfig
 from .keccak import keccak256
 from .model import Head, State
-from .claimticket import TicketClaim, TicketFrame, carried
+from .claimticket import TicketClaim, TicketFrame, TxSignature, bound, carried
 from .tx import Claim, Frame, FrameTx, Signature
 from .txpool import TxPool
 
@@ -167,6 +167,28 @@ def _rlp_list(items: list[bytes]) -> bytes:
     return bytes([0xF7 + len(n)]) + n + body
 
 
+def _encode(item) -> bytes:
+    """Canonical RLP of an item `_item` parsed: a byte string or a list."""
+    if isinstance(item, list):
+        return _rlp_list([_encode(x) for x in item])
+    if len(item) == 1 and item[0] < 0x80:
+        return item
+    if len(item) <= 55:
+        return bytes([0x80 + len(item)]) + item
+    n = len(item).to_bytes((len(item).bit_length() + 7) // 8, "big")
+    return bytes([0xB7 + len(n)]) + n + item
+
+
+def sig_hash(raw: bytes, envelope: str = "keyed") -> bytes:
+    """EIP-8141's `compute_sig_hash` of a transaction that SF-2 decoded: the `signature` bytes of every signature
+    with an empty `msg` emptied, then the keccak256 of the type byte and the payload (CG-12)."""
+    top, _ = _item(raw[1:], 0)
+    for s in top[5 if envelope == "keyed" else 4]:
+        if s[2] == b"":
+            s[3] = b""
+    return keccak256(raw[:1] + _encode(top))
+
+
 def _malformed(t: dict, envelope: str) -> bool:
     """SF-2 step 5: the EIP's constraints FP-3 does not check itself."""
     if t["nonce_seq"] >= U64 or t["chain_id"] >= U256 or len(t["sender"]) != 20:
@@ -235,22 +257,44 @@ def decode(raw: bytes, frame_cfg: FramePoolConfig, cfg: SurfaceConfig,
                                     length=len(s["signature"]) if scheme == "arbitrary" else 0))
         data += [s["signer"], s["msg"], s["signature"]]
     data.append(_rlp_list([_rlp_int(k) for k in keys]) + _rlp_int(t["nonce_seq"]))
-    claim = _claim(t, keys, frame_cfg, codes or {}) if frame_cfg.claims else None
+    claim = _claim(t, keys, frame_cfg, codes or {}, raw, cfg.envelope) if frame_cfg.claims else None
     return FrameTx(sender=_hex(t["sender"]), frames=tuple(frames), nonce_keys=tuple(keys),
                    nonce_seq=t["nonce_seq"], signatures=tuple(signatures), max_fee=t["max_fee"], tip=t["tip"],
                    size=len(raw), label=tx_hash(raw), zero_bytes=sum(d.count(0) for d in data), claim=claim)
 
 
-def _claim(t: dict, keys: list[int], frame_cfg: FramePoolConfig, codes: dict[str, bytes]) -> Claim | None:
-    """SF-3's `claim`: CG-10's, from the code of each frame's target."""
-    by_target = {bytes.fromhex(a[2:]): code for a, code in codes.items()}
+def bound_template(cfg: FramePoolConfig) -> tuple[int, bytes] | None:
+    """CG-1's `bound_template` as CG-10 reads it, or None while the profile names none."""
+    if cfg.bound_template_length is None or cfg.bound_template_keccak is None:
+        return None
+    return cfg.bound_template_length, bytes.fromhex(cfg.bound_template_keccak[2:])
+
+
+def ticket(t: dict, keys: list[int], codes: dict[bytes, bytes], frame_cfg: FramePoolConfig, raw: bytes,
+           envelope: str):
+    """CG-10's claim of a decoded transaction as (epoch, salt, binder, issuer), with CG-9's and CG-12's verdicts,
+    or None if no frame carries a ticket."""
     frames = [TicketFrame(f["mode"], f["target"] or t["sender"], f["data"]) for f in t["frames"]]
-    found = carried(TicketClaim(t["chain_id"], 0, t["sender"], t["nonce_seq"], tuple(keys), b""), frames, by_target)
+    found = carried(TicketClaim(t["chain_id"], 0, t["sender"], t["nonce_seq"], tuple(keys), b""), frames, codes,
+                    bound_template(frame_cfg))
     if found is None:
         return None
-    (epoch, salt, _), ok = found
+    (epoch, salt, binder, issuer), ok = found
+    signatures = [TxSignature(s["scheme"], s["signer"], s["msg"], s["signature"]) for s in t["signatures"]]
+    is_bound = binder is not None and bound(binder, t["sender"], signatures, sig_hash(raw, envelope))
+    return (epoch, salt, binder, issuer), ok, is_bound
+
+
+def _claim(t: dict, keys: list[int], frame_cfg: FramePoolConfig, codes: dict[str, bytes], raw: bytes,
+           envelope: str) -> Claim | None:
+    """SF-3's `claim`: CG-10's, from the code of each frame's target, with CG-12's verdict over the bytes received."""
+    found = ticket(t, keys, {bytes.fromhex(a[2:]): code for a, code in codes.items()}, frame_cfg, raw, envelope)
+    if found is None:
+        return None
+    (epoch, salt, binder, _), ok, is_bound = found
     return Claim(sender=_hex(t["sender"]), nonce_seq=t["nonce_seq"], epoch=epoch or 0, nonce_keys=tuple(keys),
-                 valid=ok, salt="" if salt is None else _hex(salt))
+                 valid=ok, salt="" if salt is None else _hex(salt), binder="" if binder is None else _hex(binder),
+                 bound=is_bound)
 
 
 def _roots(data: bytes) -> tuple[tuple[str, int, str], ...]:
