@@ -69,4 +69,5 @@ and says so.
 | [0062](0062-a-bond-on-the-ticket-paymaster-is-modelled-in-the-simulator-as-erc-8421-s-stake-and-reputation.md) | A bond on the ticket paymaster is modelled in the simulator, as ERC-8421's stake and reputation |
 | [0063](0063-eip-8288-on-master-is-a-second-profile-beside-the-pinned-one-with-leanstark-reserved.md) | EIP-8288 on master is a second profile beside the pinned one, with leanSTARK reserved |
 | [0064](0064-the-bond-on-the-ticket-paymaster-is-a-clause-of-claim-gated-admission.md) | The bond on the ticket paymaster is a clause of claim-gated admission |
+| [0065](0065-a-private-transfer-with-a-nonce-key-per-nullifier-needs-two-key-set-rules-and-no-new-clause-of-its-own.md) | A private transfer with a nonce key per nullifier needs two key-set rules, and no clause of its own |
 | [0070](0070-the-key-round-is-specified-from-the-eips-text-with-real-keys-and-decryption-as-a-field.md) | The key round is specified from the EIP's text, with real keys and decryption as a field |

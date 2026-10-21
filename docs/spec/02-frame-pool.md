@@ -1,6 +1,6 @@
 # 02. The frame transaction pool (EIP-8141 public mempool)
 
-Version 7, 2026-10-20.
+Version 8, 2026-10-21.
 
 The public mempool policy for EIP-8141 frame transactions, with EIP-8250's
 keyed nonces, written down as clauses. Both EIPs are Draft; the text was read
@@ -91,8 +91,10 @@ Decision record 0020.
 
 **FP-3. Static validity.** The pool MUST reject with `ErrFrameMalformed` a
 transaction that breaks a constraint of EIP-8141 "Constraints" or "Expiry
-Verifier Frame" that the model can express: between 1 and 64 frames;
-`nonce_keys` non-empty and strictly increasing; every `mode` below 3 and every
+Verifier Frame", or of EIP-8250 "Transaction payload", that the model can
+express: between 1 and 64 frames; `nonce_keys` non-empty, at most 16 of them
+(`MAX_NONCE_KEYS`), strictly increasing, and holding 0 only as the single key
+of `(0)`; every `mode` below 3 and every
 `flags` below 8; `value` only on `SENDER` frames; a frame whose flags include
 `APPROVE_EXECUTION` (0x2) targets `sender` or nothing; a frame with
 `ATOMIC_BATCH_FLAG` (0x4) is not `VERIFY`, is not last, and is followed by a
@@ -104,7 +106,10 @@ $\max(g_{\text{intr}} + \sum_f e_f,\, g_{\text{floor}}) > 16777216$ (FEE-4);
 algorithm); `ErrTipAboveFeeCap` if `tip` > `max_fee`; `ErrTxGasPriceTooLow` if
 `tip` < `price_limit`; `ErrGasLimit` if `max_gas` exceeds the head's
 `gas_limit`. *Interpretation:* the last three are not in the EIP and mirror
-NP-3.
+NP-3. **Source** for the nonce keys: EIP-8250 "Transaction payload", whose
+decoders reject `len(nonce_keys) > MAX_NONCE_KEYS` and "any item in
+`nonce_keys` is `0` and `nonce_keys != [0]`" (version 8, decision record
+0065).
 
 **FP-4. The validation prefix.** The validation prefix is the frames up to and
 including the first frame whose `flags` include `APPROVE_PAYMENT` (0x1).
@@ -404,3 +409,8 @@ transactions consume the same nonce sequence.
   behaviour does not change, nor does `hegota-testnet`'s for a transaction
   with no frame that targets `0x0000000000000000000000000000000000008272`:
   every vector of version 6 holds unchanged and now says version 7.
+- **Version 8.** FP-3 reads EIP-8250's two rules on the key set that version
+  7 left out: at most 16 nonce keys, and key 0 only alone (decision record
+  0065). Two vector cases that put key 0 beside another key are re-read:
+  such a transaction is malformed. Every other vector of version 7 holds
+  unchanged and now says version 8.

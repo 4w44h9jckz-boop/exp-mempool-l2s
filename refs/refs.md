@@ -51,7 +51,18 @@ says is checked against the primary source before it is relied on.
   (`KEYED_NONCE_FIRST_USE_STATE_GAS`, 97920 under EIP-8037's current
   constants), Transaction payload (the nonce fields priced as data, which
   FEE-4 version 2 now does) and the payment-scoped `APPROVE` transition (state
-  gas only). Used for FEE-4 and decision records 0006 and 0007. EIP-8141 at
+  gas only). Used for FEE-4 and decision records 0006 and 0007. Read again
+  2026-10-21 for an Aztec-model transfer: Transaction payload, whose decoders
+  reject more than `MAX_NONCE_KEYS` (16) keys and key 0 beside another key;
+  Stateful validity (`nonce_seq < MAX_NONCE_SEQ`); Mempool ("That state gas
+  draws from the frame's `limits.state` and does not count toward
+  `MAX_VERIFY_GAS`. The existing `MAX_VERIFY_STATE_GAS` cap on the sum of
+  state limits in the validation prefix is unchanged"). Used for FP-3
+  version 8 and decision record 0065. On master at
+  `25b1952395d99df32f4a540028c48ae5c1b837ec`, read the same day, an empty
+  key set selects the legacy nonce and `nonce_seq == MAX_NONCE_SEQ` marks
+  every key single-use; `MAX_NONCE_KEYS` is still 16. Not read into the
+  specification (decision record 0065). EIP-8141 at
   the same commit was read again for `calldata_cost`, `floor_tokens_in` and
   the floor (section Gas Accounting) and the expiry verifier's runtime code.
   EIP-8141 at the same commit was read again on 2026-10-08 for experiment 03:
