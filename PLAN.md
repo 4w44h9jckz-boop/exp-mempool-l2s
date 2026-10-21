@@ -238,6 +238,35 @@ they added; their experiments are not part of this repository.
     after the `base` and experiment 26 pull requests. *Finished,
     2026-10-21:* #4, #5 and #6 merged; `main` at `ff529ef`, and `base`
     fast-forwarded to it.
+53. **A private transfer with a nonce key per nullifier.** An Aztec-model
+    transfer from a shared contract: its `VERIFY` frame checks the user's
+    proof, and each note it spends is one EIP-8250 nonce key. Does the
+    specification already say how a node admits it, relays it and refuses
+    its double spend before inclusion? *Done on the session branch,
+    2026-10-21:* yes, with two of EIP-8250's key-set rules FP-3 had missed,
+    at most 16 keys and key 0 only alone: `02-frame-pool.md` version 8 and
+    `fp-12-nullifier-keys.json` (decision record 0065), at `8710ba1`, in
+    [4w44h9jckz-boop/exp-mempool-l2s#7](https://github.com/4w44h9jckz-boop/exp-mempool-l2s/pull/7).
+    Under `eip-8141` a transfer spends at most 5 fresh nullifiers, since each
+    costs 97,920 state gas. The wallet's real transfer is still to come.
+54. **A committee's result and its shared-state update.** A result whose
+    `VERIFY` frame checks a committee's threshold signature, and an update
+    sent from the committee's account with a payer: how does FP-11's one
+    pending transaction for a non-canonical payer apply to each, and what
+    does it cost a committee that posts often? *Done on the session branch,
+    2026-10-21:* no clause is new; `fp-11-committee.json` and decision
+    record 0066, at `7385a0f`, in #7. A BLS check is above `eip-8141`'s
+    verify budget; a non-canonical paymaster lands at most one of the
+    committee's transactions a block. The committee's own shapes are still
+    to come.
+55. **A ticket bound to its transaction.** A ticket names one slot and
+    nothing the transaction does or pays, so whoever forwards a transaction
+    whose sender does not sign can change its fee or calldata and keep the
+    ticket. Can the ticket's message commit to a one-time key the buyer
+    chose, so that only that key's signature over the transaction's
+    signature hash makes the claim count, with nothing asked of the issuer
+    when it is spent? *Started, 2026-10-21:* `10-claim-gated-admission.md`
+    version 6, CG-12 (decision record 0067).
 
 44. **An ERC-8421 profile.** Read from ERC-8421: stake and reputation for
     paymasters and other operators, and what a fresh sender is asked for.
