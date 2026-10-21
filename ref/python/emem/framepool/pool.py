@@ -310,13 +310,16 @@ class FramePool:
             self.refused_claims[claim] = claim.epoch
 
     def _check_claim(self, tx: FrameTx) -> None:
-        """CG-11 under `bond`, then CG-2, then CG-4, then CG-6, as the pool runs them after FP-6."""
+        """CG-11 under `bond`, then CG-2 with CG-12 under `binding` after its step 1, then CG-4, then CG-6, as the
+        pool runs them after FP-6."""
         claim = tx.claim
         if claim is None:
             if dependencies(tx, self.config):
                 raise TxError(E.ErrClaimMissing)
             return
         self._check_bond(tx)
+        if self.config.binding and not claim.bound:
+            raise TxError(E.ErrClaimUnbound)
         if not claim.valid:
             raise TxError(E.ErrClaimInvalid)
         if claim.slot != tx.slot:

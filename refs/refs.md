@@ -45,13 +45,35 @@ says is checked against the primary source before it is relied on.
   Sections: Constants, Frame Transaction, Constraints, Signature Validation,
   Expiry Verifier Frame, Behavior, Gas Accounting, Default code, `APPROVE`,
   Mempool (all subsections). Used for `docs/spec/02-frame-pool.md`, MD-6, FEE-4.
+  Read again at the same commit on 2026-10-21: Transaction Signatures,
+  Signature Hash (`compute_sig_hash`), Signature Validation
+  (`validate_signature` for `SECP256K1`), Introspection (`TXPARAM` and
+  `SIGPARAM`), and Security Considerations, "Arbitrary Signature
+  Malleability". Used for CG-12 of `docs/spec/10-claim-gated-admission.md`
+  version 6, SF-3 version 4 and decision record 0067. Compared the same day
+  with master at `25b1952395d99df32f4a540028c48ae5c1b837ec`: "Signature
+  Hash", "Transaction Signatures" and `validate_signature` are the same, so
+  frame data, `VERIFY` frames' included, stays inside the signature hash,
+  and `SIGPARAM`'s table only gains a name for each parameter. Used for
+  decision record 0067, point 8.
 - **EIP-8250, Keyed Nonces for Frame Transactions**, Draft, same commit, read
   2026-10-07. Sections: Mempool, Rationale. Used for FP-7 and FP-12. Read
   again the same day for experiment 02: Constants
   (`KEYED_NONCE_FIRST_USE_STATE_GAS`, 97920 under EIP-8037's current
   constants), Transaction payload (the nonce fields priced as data, which
   FEE-4 version 2 now does) and the payment-scoped `APPROVE` transition (state
-  gas only). Used for FEE-4 and decision records 0006 and 0007. EIP-8141 at
+  gas only). Used for FEE-4 and decision records 0006 and 0007. Read again
+  2026-10-21 for an Aztec-model transfer: Transaction payload, whose decoders
+  reject more than `MAX_NONCE_KEYS` (16) keys and key 0 beside another key;
+  Stateful validity (`nonce_seq < MAX_NONCE_SEQ`); Mempool ("That state gas
+  draws from the frame's `limits.state` and does not count toward
+  `MAX_VERIFY_GAS`. The existing `MAX_VERIFY_STATE_GAS` cap on the sum of
+  state limits in the validation prefix is unchanged"). Used for FP-3
+  version 8 and decision record 0065. On master at
+  `25b1952395d99df32f4a540028c48ae5c1b837ec`, read the same day, an empty
+  key set selects the legacy nonce and `nonce_seq == MAX_NONCE_SEQ` marks
+  every key single-use; `MAX_NONCE_KEYS` is still 16. Not read into the
+  specification (decision record 0065). EIP-8141 at
   the same commit was read again for `calldata_cost`, `floor_tokens_in` and
   the floor (section Gas Accounting) and the expiry verifier's runtime code.
   EIP-8141 at the same commit was read again on 2026-10-08 for experiment 03:
@@ -598,12 +620,20 @@ says is checked against the primary source before it is relied on.
   (`MinSig`, `G1_MESSAGE`) and `utils/src/lib.rs` (`union_unique`). Run the
   same day, outside this repository, to sign every ticket in
   `conformance/vectors/claim-gated/`. Used for CG-9 and decision record 0056.
+  Run again from the same clone on 2026-10-21, through a 50-line program
+  outside this repository that calls `sign_message` and `verify_message`
+  for `MinSig` and writes both points in EIP-2537's encoding, to sign the
+  152-byte messages of CG-8 version 6 in `cg-08-ticket-message.json`,
+  `cg-10-ticket-carriage.json` and `cg-12-bound-copies.json`. Used for
+  decision record 0067.
 - **EIP-2537, Precompile for BLS12-381 curve operations**, Final, at
   `258836f9`, read 2026-10-20: "Fine points and encoding of base elements"
   (each field element in 64 bytes, its top 16 zero and below the modulus;
   an element of the extension field as `c0` then `c1`; the point at
   infinity as zeros), "ABI for pairing check" and "Subgroup checks". Used
-  for CG-9 and CG-10.
+  for CG-9 and CG-10. Read again at `258836f9` on 2026-10-21, "Gas
+  schedule": a pairing check of $k$ pairs costs `32600*k + 37700` gas, a
+  map to G1 5,500 and an addition in G1 375. Used for decision record 0066.
 - **EIP-8250**, at `258836f9` and again on master at
   `0ce679f4654ba4d120c97113626f320475e22fa9` (2026-10-19), read
   2026-10-20: "Transaction introspection", `TXPARAM(0x0F)` and the
@@ -689,7 +719,14 @@ says is checked against the primary source before it is relied on.
   encoding of each fixture used in `conformance/vectors/surface/` hashes to
   the chain's hash; `test/encode.test.ts` (ethrex's golden vector);
   `exp-frames/experiments/19-mempool-rules/README.md` (ethrex's refusal texts). Used for
-  `docs/spec/11-surface.md` and its vectors.
+  `docs/spec/11-surface.md` and its vectors. Read again 2026-10-21 at the
+  same commit: `exp-frames/experiments/20-signature-service/README.md`, contracts that
+  read the protocol's `secp256k1` and `p256` entries with `SIGPARAM` on the
+  testnet, with mined transactions; and `src/frametx/encode.ts` and
+  `sign.ts` (`frameSigHash`, `signFrameTx`), run outside this repository to
+  make every transaction, signature hash and `secp256k1` signature of
+  `conformance/vectors/claim-gated/cg-12-bound-copies.json`. Used for CG-12
+  and decision record 0067.
 - **exp-frames** (branch `claude/nifty-einstein-llp9cd` at `f0749cb`, read
   2026-10-20): `exp-frames/experiments/36-blind-tickets/`, blind tickets issued by a
   threshold committee and paid for in a paymaster's `VERIFY` frame on the

@@ -18,7 +18,7 @@ from ..dependencies import check_frame, check_limits
 from ..errors import TxError
 from ..model import Head, State, is_delegation
 from ..tx import (APPROVE_EXECUTION, APPROVE_PAYMENT, APPROVE_SCOPE_MASK, ATOMIC_BATCH_FLAG, DEFAULT_MODE,
-                  MAX_FRAMES, SENDER_MODE, SIGNATURE_GAS, TX_MAX_GAS_LIMIT, VERIFY_MODE, Frame,
+                  MAX_FRAMES, MAX_NONCE_KEYS, SENDER_MODE, SIGNATURE_GAS, TX_MAX_GAS_LIMIT, VERIFY_MODE, Frame,
                   FrameTx)
 from .config import FramePoolConfig
 
@@ -134,6 +134,8 @@ def check_fp3(tx: FrameTx, gas_limit: int, cfg: FramePoolConfig) -> None:
         _fail(E.ErrFrameMalformed)
     keys = tx.nonce_keys
     if not keys or any(k < 0 for k in keys) or any(a >= b for a, b in zip(keys, keys[1:])):
+        _fail(E.ErrFrameMalformed)
+    if len(keys) > MAX_NONCE_KEYS or (0 in keys and keys != (0,)):  # EIP-8250's key set, version 8
         _fail(E.ErrFrameMalformed)
     if not 0 <= tx.nonce_seq < 2**64:
         _fail(E.ErrFrameMalformed)

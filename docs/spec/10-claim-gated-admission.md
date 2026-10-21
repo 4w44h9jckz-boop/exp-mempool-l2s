@@ -1,19 +1,21 @@
 # 10. Claim-gated admission (proposal)
 
-Version 5, 2026-10-20. Version 1, 2026-10-13, had every node verify;
+Version 6, 2026-10-21. Version 1, 2026-10-13, had every node verify;
 version 2, the same day, added `verifies` and CG-7; version 3, 2026-10-20,
 added CG-8 to CG-10, the bytes a ticket signs, how a node verifies one and
 where a transaction carries it; version 4, the same day, recognises a
 ticket paymaster by its code rather than from a set a node holds; version
 5, the same day, accepts a ticket paymaster only under a bond, ERC-8421's
-stake and reputation (CG-11).
+stake and reputation (CG-11); version 6, 2026-10-21, binds a ticket to the
+transaction it pays for, through a one-time key the buyer chose (CG-12).
 
 **Status: proposal.** This document states, as clauses, an admission policy
 that no client implements and no EIP specifies: claim-gated admission,
 stated as six rules, R1 to R6, with a variant that remembers bad claims
 rather than slots, and with nodes that need not verify. Decision record 0037
 records the readings it rests on, decision record 0064 those of the bond,
-and its vectors check the clauses. A clause marked *Interpretation* is this
+decision record 0067 those of the binding, and its vectors check the
+clauses. A clause marked *Interpretation* is this
 repository's reading where the rules leave a choice open, and names the
 decision record. The profile,
 `claim-gated`, is the specification of nothing but this document.
@@ -50,7 +52,11 @@ these changes and no others:
   the claim's chain, epoch and slot, carried to a ticket paymaster;
 - CG-11, under `bond`, accepts a ticket only if its paymaster is staked as
   ERC-8421 stakes an operator, keeps ERC-8421's reputation for each ticket
-  paymaster, and refuses a banned one before the ticket is checked.
+  paymaster, and refuses a banned one before the ticket is checked;
+- CG-12, under `binding`, accepts a claim only if the ticket's message names
+  a one-time key and that key signed the transaction's signature hash, so a
+  copy of the transaction with any signed field changed is not paid by the
+  same ticket.
 
 ## Profile
 
@@ -64,6 +70,8 @@ these changes and no others:
 | `signed_proofs` | false | whether a sender's signature covers the proofs a wrapper carries for its transaction; false is EIP-8288's wrapper; *Interpretation*, decision record 0037 |
 | `verifies` | true | whether the node verifies proofs; a node with false is a relay (CG-7); a value of each node, not of the network; decision record 0038 |
 | `bond` | true | whether CG-11 applies; false under every other profile, and a profile with `claims` and without `bond` is version 4's admission; decision record 0064 |
+| `binding` | true | whether CG-12 applies; false under every other profile, and a profile with `claims` and without `binding` is version 5's admission; decision record 0067 |
+| `bound_template` | none | the bound template of CG-10, as its length and keccak256; none until one is fixed, and a profile with none has no bound ticket paymaster; decision record 0067 |
 
 Every AG-1 parameter is `eip-8288`'s. Under `bond`, CG-11 reads seven of
 AM-1's parameters (`14-erc-8421.md`), with the values
@@ -85,6 +93,7 @@ experiments measure each value.
 | `ErrClaimExpired` | CG-6 |
 | `ErrRelayAggregate` | CG-7 |
 | `ErrIssuerUnbonded`, `ErrEntityBanned`, `ErrEntityThrottled` | CG-11 |
+| `ErrClaimUnbound` | CG-12 |
 
 The rules name no errors; these codes are this repository's. CG-11's last
 two are the codes `14-erc-8421.md` gives REPUTATION-010 and REPUTATION-020.
@@ -94,9 +103,11 @@ two are the codes `14-erc-8421.md` gives REPUTATION-010 and REPUTATION-020.
 **CG-2. A claim names one slot in one epoch (R2).** A transaction's *slot*
 is its `sender`, `nonce_keys` and `nonce_seq`. A *claim* carries a `sender`,
 `nonce_keys`, `nonce_seq` and `epoch`, `valid`, whether the issuer's
-signature on it verifies, and a `salt` (MD-6); two claims with equal fields
-are one claim. Under `claims`, after FP-6, after CG-11 under `bond`, and
-before AG-6, the pool MUST reject:
+signature on it verifies, a `salt`, a `binder` and `bound`, whether it is
+bound to its transaction (MD-6, CG-12); two claims with equal fields are
+one claim. Under `claims`, after FP-6, after CG-11 under `bond`, and before
+AG-6, the pool MUST reject, with CG-12's check between steps 1 and 2 under
+`binding`:
 
 1. with `ErrClaimMissing`, a transaction with a dependency (AG-4) that
    carries no claim;
@@ -207,7 +218,7 @@ Aggregation), which is a verifier's work, so a relay proposes nothing
 
 ## Tickets
 
-The clauses above read a claim's `valid` flag. A real claim is a ticket: an
+The clauses above read a claim's `valid` and `bound` flags. A real claim is a ticket: an
 issuer's signature over a message naming one slot in one epoch on one
 chain, which the buyer obtained blind, so that the issuer cannot link the
 ticket it signed to the ticket it later sees. Blinding happens between the
@@ -216,21 +227,22 @@ ticket as it would any BLS signature. A transaction carries its ticket to a
 *ticket paymaster*, a contract that pays its gas in a `VERIFY` frame after
 checking the same signature on EIP-2537's precompiles, so that a node and
 the chain check one ticket over the same bytes. CG-8 to CG-10 hold for
-every profile that sets `claims`; the vectors of CG-2 to CG-7 give the flag
+every profile that sets `claims`; the vectors of CG-2 to CG-7 give the flags
 directly.
 
 **CG-8. A ticket's message.** For a claim with `sender` $S$, `nonce_keys`
-$K$, `nonce_seq` $s$, `epoch` $e$ and `salt` $t$, on the chain whose ID is
-$c$, the message is
+$K$, `nonce_seq` $s$, `epoch` $e$, `salt` $t$ and no `binder`, on the chain
+whose ID is $c$, the message is
 
 $$m = \mathrm{be}_{32}(c) \Vert S \Vert h(K) \Vert \mathrm{be}_{8}(s) \Vert \mathrm{be}_{8}(e) \Vert t$$
 
 where $\mathrm{be}_{l}(x)$ is $x$ as $l$ bytes, most significant first, $S$
 is the sender's 20 bytes, $h(K)$ is EIP-8250's `nonce_keys_hash` of $K$,
 the 32 bytes `TXPARAM(0x0F)` returns, and $t$ is 32 bytes, so $m$ is 132
-bytes long. A claim has no message when $c$ or a key is not below
-$2^{256}$, when $s$ or $e$ is not below $2^{64}$, or when $S$ is not 20
-bytes or $t$ not 32. **Source:** EIP-8250 at `258836f9`, "Transaction
+bytes long. For a claim whose `binder` is $a$, the address of a one-time
+key, the message is $m \Vert a$, 152 bytes. A claim has no message when $c$
+or a key is not below $2^{256}$, when $s$ or $e$ is not below $2^{64}$, or
+when $S$ is not 20 bytes, $t$ not 32, or a `binder` not 20. **Source:** EIP-8250 at `258836f9`, "Transaction
 introspection", for $h$: the keccak256 of the number of keys and the keys,
 each as 32 bytes; decision record 0056. *Interpretation:* the fields are
 CG-2's claim at fixed widths, so two claims that differ in any field have
@@ -238,7 +250,9 @@ different messages, and a ticket paymaster rebuilds $m$ from `CHAINID` and
 `TXPARAM` with no loop over the keys. $K$ is the keys the transaction
 carries. The chain ID binds a ticket to one chain. The salt is the buyer's,
 so that two tickets for one slot in one epoch are two claims (CG-5);
-decision record 0056.
+decision record 0056. The binder goes last, so that a message without one
+is version 5's, and the issuer, which signs blind, learns it no more than
+the salt; decision record 0067.
 
 **CG-9. A ticket's verification.** A ticket carries a `signature`, 128
 bytes, and names an `issuer` key, 256 bytes (CG-10 says how), beside its
@@ -282,14 +296,21 @@ template, 1,105 bytes whose keccak256 is
 `0xec9f3f855524392a3891f2f2eb554781236d5565520d68388e455be74bdf3fe0`; $K$,
 256 bytes that decode as a point of G2 as CG-9 step 2 decodes `issuer`, on
 the twist, in the subgroup and not the point at infinity; and $D$, any 32
-bytes. Under `claims`, a frame transaction carries a claim exactly when one
-of its frames is a `VERIFY` frame whose target is a ticket paymaster. The
-first such frame is the ticket's. Its data is
-$\mathrm{be}_{8}(e) \Vert t \Vert \sigma$, 168 bytes: the claim's `epoch`
-$e$, its `salt` $t$, and the `signature` $\sigma$ in EIP-2537's 128 bytes.
-The claim's `sender`, `nonce_keys` and `nonce_seq` are the transaction's
-own, its `issuer` is that paymaster's $K$, and it is `valid` by CG-9. Data
-of any other length makes a claim that is not `valid`. **Source:** for
+bytes. A *bound ticket paymaster* is an account whose code at the node's
+head is $T_b \Vert K \Vert D$, with $K$ and $D$ as above and $T_b$ the bound
+template that CG-1's `bound_template` names by its length and keccak256; a
+profile that names none has no bound ticket paymaster. Under `claims`, a
+frame transaction carries a claim exactly when one of its frames is a
+`VERIFY` frame whose target is a ticket paymaster or a bound ticket
+paymaster. The first such frame is the ticket's. To a ticket paymaster its
+data is $\mathrm{be}_{8}(e) \Vert t \Vert \sigma$, 168 bytes: the claim's
+`epoch` $e$, its `salt` $t$, and the `signature` $\sigma$ in EIP-2537's 128
+bytes; the claim has no `binder`. To a bound ticket paymaster its data is
+$\mathrm{be}_{8}(e) \Vert t \Vert a \Vert \sigma$, 188 bytes, and the
+claim's `binder` is $a$. The claim's `sender`, `nonce_keys` and `nonce_seq`
+are the transaction's own, its `issuer` is that paymaster's $K$, it is
+`valid` by CG-9 and `bound` by CG-12. Data of any other length makes a
+claim that is neither `valid` nor `bound`. **Source:** for
 $T$, `kohaku-rs` at `eea02a3`, `crates/frame-ticket/contracts/TicketPaymaster.hex`
 after its 25-byte constructor, whose `TicketPaymaster.yul` appends the key
 and a 32-byte denomination to the code it deploys; the same bytes are the
@@ -300,8 +321,12 @@ names the key, so a ticket carries no key of its own and a node checks one
 signature; a set of issuers is a set of paymasters. A node can keep a
 paymaster's verdict by its code hash, since the code decides it. A
 transaction names the slot and the chain, so the frame carries only the
-epoch, the salt and the signature. A ticket to any other account is no
-claim at all, and CG-2 judges the transaction without one.
+epoch, the salt and the signature, and the binder when the ticket names
+one. A ticket to any other account is no claim at all, and CG-2 judges the
+transaction without one. The bound template is the one that rebuilds the
+152-byte message and checks the binding as CG-12 does; until its code is
+fixed, `claim-gated` names none, and every ticket a node there reads is
+unbound; decision record 0067.
 
 What a junk proof then costs its sender, read from these clauses: anyone
 can deploy the template with a key of their own and sign their own
@@ -415,6 +440,46 @@ parameters:
 No honest spend was refused, and no honest delay moved, in any of
 experiment 26's rows.
 
+## The binding
+
+**CG-12. A ticket bound to its transaction.** A claim is **bound** when it
+has a `binder` $a$ and its transaction carries a signature that:
+
+1. has `scheme` `secp256k1` and an empty `msg`;
+2. has $a$ as its resolved signer: its `signer`, or the transaction's
+   `sender` when `signer` is empty;
+3. verifies over the transaction's signature hash, `compute_sig_hash(tx)`:
+   its 65 bytes are $v \Vert r \Vert s$ with $v \le 1$, $0 < r < n$ and
+   $0 < s \le \lfloor n / 2 \rfloor$, $n$ the order of secp256k1, and the
+   address they recover for that hash is $a$.
+
+Under `claims` and `binding`, after CG-2's step 1 and before its step 2,
+the pool MUST reject with `ErrClaimUnbound` a transaction whose claim is not
+`bound`. A claim with no `binder` is not bound. The model's `bound` flag
+(MD-6) stands for this verdict, as `valid` stands for CG-9's; a node that
+reads a real transaction computes both (CG-10, `11-surface.md` SF-3).
+**Source:** EIP-8141 at `258836f9`, "Signature Hash", where
+`compute_sig_hash(tx)` empties the `signature` bytes of every signature
+with an empty `msg` and hashes the rest of the transaction; "Signature
+Validation", `validate_signature` for `SECP256K1`, which is step 3;
+"Transaction Signatures" ("Every protocol-validated signature in this list
+must validate successfully before any frame is executed"); and
+"Introspection", `SIGPARAM`, which returns a signature's resolved signer,
+scheme and `msg` to a `VERIFY` frame, so a bound ticket paymaster can check
+steps 1 and 2 and leave step 3 to the protocol. *Interpretation*, decision
+record 0067: the buyer chooses the one-time key and puts its address in the
+message it has signed blind, so the issuer never sees it and is not needed
+when the ticket is spent. The signature hash covers every field of the
+transaction but the bytes of signatures over it, the ticket's frame
+included, so a copy with any field changed is not signed by the binder,
+and only the binder's holder can sign another. The signature is a
+`secp256k1` entry of the transaction's list rather than bytes in a frame,
+since a signature over the signature hash cannot sit in the frame data
+that hash covers; `p256` is left out, since a one-time key gains nothing
+from a passkey and its check costs 6,700 gas of FP-6's budget rather than
+2,800. The check comes before `valid` so that a node can refuse an unbound
+claim without CG-9's pairing.
+
 ## Not modelled
 
 - R5: whatever admission reads is carried in the transaction or owned by
@@ -459,6 +524,19 @@ experiment 26's rows.
   learns which of its peers verify.
 - A recursive STARK that does not verify, and the nodes that send one: the
   claims bind proofs a node verifies directly.
+- The bound template's code, and what checking the binding in its `VERIFY`
+  frame costs. CG-1's `bound_template` names it once it is fixed; until
+  then, `claim-gated` reads every ticket as unbound. The binding's
+  signature adds 2,800 gas to the transaction's verification cost (FEE-4),
+  which FP-6 counts against `max_verify_gas`.
+- How a buyer derives its one-time keys, and what a wallet must keep to
+  spend a ticket it bought: CG-12 reads only the address in the message and
+  the signature in the transaction.
+- A signature with an empty `msg` whose scheme is `arbitrary`: its bytes,
+  like the binder's, are outside the signature hash, so a copy that changes
+  them keeps a bound claim bound. Whoever can change them is whoever its
+  own verifier accepts; EIP-8141's "Arbitrary Signature Malleability"
+  leaves that to the verifier.
 
 ## Version notes
 
@@ -481,3 +559,12 @@ experiment 26's rows.
   transaction of the earlier vectors pays for itself, so CG-11 reads
   nothing for it: the vectors of CG-2 to CG-10 hold unchanged and now say
   version 5, and CG-11's are new.
+- **Version 6.** CG-1 gains `binding`, true under `claim-gated`, and
+  `bound_template`, none under it; a claim gains a `binder` and a `bound`
+  flag (MD-6, `00-model.md` version 12); CG-8's message ends with the
+  binder when a claim has one; CG-10 reads a bound ticket paymaster's 188
+  bytes; and CG-12 refuses a claim its binder has not signed for. A model
+  claim is `bound` unless a vector says otherwise, so the vectors of CG-2 to
+  CG-7 and CG-11 hold unchanged and now say version 6; so do CG-8's, CG-9's
+  and CG-10's, whose claims have no binder. CG-12's are new, and CG-8's,
+  CG-9's and CG-10's gain cases with a binder.
