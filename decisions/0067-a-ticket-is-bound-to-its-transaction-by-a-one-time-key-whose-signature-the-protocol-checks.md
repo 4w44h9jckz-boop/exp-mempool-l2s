@@ -53,7 +53,12 @@ Read from EIP-8141 at `258836f9`:
    before it asks a client, so that an unbound copy costs it one recovery
    and no pairing.
 3. **`secp256k1` only.** A one-time key gains nothing from a passkey, and a
-   `p256` entry costs 6,700 gas of FP-6's budget rather than 2,800.
+   `p256` entry costs 6,700 gas of FP-6's budget rather than 2,800. The
+   scheme is ECDSA, not a hash-based one-time signature. A second
+   signature by the same key therefore hands nobody a forgery, and a wallet
+   may sign a replacement of a pending transaction, at the price bump, with
+   the same key. The replacement has the original's slot, so it is linked
+   to it no more than it already was.
 4. **The check sits between CG-2's steps 1 and 2.** It is cheaper than
    CG-9's pairing, and a node that refuses an unbound claim first never runs
    the pairing for it.
@@ -73,6 +78,18 @@ Read from EIP-8141 at `258836f9`:
    pool's vectors give it, and CG-10's and the surface's compute it from
    bytes. Its default and an empty binder leave every claim's hash, and
    every earlier vector, as they were.
+8. **What the binding covers is the whole signature hash.** That hash
+   includes the fee fields, the frames, and so the payer: FP-10 reads the
+   payer from the frame that approves payment. It also includes the
+   ticket's own frame, epoch, salt, binder and signature, since EIP-8141
+   elides no frame data from it. It leaves out only the bytes of
+   signatures whose `msg` is empty: the binder's own, and any other's. A
+   protocol-validated signature among those can be made only by its key's
+   holder; an `arbitrary` one is as its verifier allows (Not modelled).
+   EIP-8141 on master, read at `25b19523` on 2026-10-21, has the same
+   "Signature Hash", "Transaction Signatures" and `validate_signature`.
+   Its `SIGPARAM` gains only names for its parameters. So this holds there
+   too.
 
 ## Vectors and their sources
 

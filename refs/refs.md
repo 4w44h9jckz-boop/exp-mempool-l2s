@@ -50,7 +50,12 @@ says is checked against the primary source before it is relied on.
   (`validate_signature` for `SECP256K1`), Introspection (`TXPARAM` and
   `SIGPARAM`), and Security Considerations, "Arbitrary Signature
   Malleability". Used for CG-12 of `docs/spec/10-claim-gated-admission.md`
-  version 6, SF-3 version 4 and decision record 0067.
+  version 6, SF-3 version 4 and decision record 0067. Compared the same day
+  with master at `25b1952395d99df32f4a540028c48ae5c1b837ec`: "Signature
+  Hash", "Transaction Signatures" and `validate_signature` are the same, so
+  frame data, `VERIFY` frames' included, stays inside the signature hash,
+  and `SIGPARAM`'s table only gains a name for each parameter. Used for
+  decision record 0067, point 8.
 - **EIP-8250, Keyed Nonces for Frame Transactions**, Draft, same commit, read
   2026-10-07. Sections: Mempool, Rationale. Used for FP-7 and FP-12. Read
   again the same day for experiment 02: Constants
