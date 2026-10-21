@@ -55,7 +55,13 @@ says is checked against the primary source before it is relied on.
   Hash", "Transaction Signatures" and `validate_signature` are the same, so
   frame data, `VERIFY` frames' included, stays inside the signature hash,
   and `SIGPARAM`'s table only gains a name for each parameter. Used for
-  decision record 0067, point 8.
+  decision record 0067, point 8. Read again at the same commit later the
+  same day: Constraints (an explicit `msg` must be 32 bytes and not 32 zero
+  bytes), Signature Validation (`validate_signature` for `P256`: low `s`,
+  and the signer is the last 20 bytes of the keccak256 of $q_x \Vert q_y$),
+  and `SIGPARAM` (which halts on an `ARBITRARY` entry's resolved signer).
+  Used for decision record 0069 and
+  `conformance/vectors/claim-gated/cg-12-binder-entries.json`.
 - **EIP-8250, Keyed Nonces for Frame Transactions**, Draft, same commit, read
   2026-10-07. Sections: Mempool, Rationale. Used for FP-7 and FP-12. Read
   again the same day for experiment 02: Constants
@@ -727,6 +733,44 @@ says is checked against the primary source before it is relied on.
   make every transaction, signature hash and `secp256k1` signature of
   `conformance/vectors/claim-gated/cg-12-bound-copies.json`. Used for CG-12
   and decision record 0067.
+- **exp-e2e-frames** (4w44h9jckz-boop/exp-e2e-frames, branch
+  `tooling-committee` at `c8eb5cc`, read 2026-10-21):
+  `committee/bls-committee/README.md`, "The signed result (fixed)" and "One
+  result per request"; `committee/fhe-committee/README.md`, "The input
+  format (fixed)"; `committee/co-withdraw/README.md`, "The witness's share
+  format (fixed)". Used for
+  `conformance/vectors/frame-pool/fp-11-committee.json` and decision record
+  0066.
+- **exp-frames** (branch `exp/42-noir-transfer` at `32586cc`, read
+  2026-10-21): `exp-frames/experiments/42-noir-transfer/README.md`, a private transfer on
+  Aztec's note and nullifier model, proved in Noir and checked in a `VERIFY`
+  frame, with its two nullifiers as EIP-8250 nonce keys;
+  `pool.groth16.json`, the transfer the Hegota testnet mined in block
+  491,278 (`0x10d33e629d2cc0b3873e9a000539b48566dd5026481802dfea99a67584768afd`,
+  receipt status 1 by `eth_getTransactionReceipt`) and the same bytes
+  refused after it; and `pool.json`, the zero-knowledge pool's two refused
+  attempts and the layout pool's transfer, mined in block 491,124 with the
+  same nullifiers. Blocks 491,123, 491,277 and 491,278 by
+  `eth_getBlockByNumber`, and the two pools' balances by `eth_getBalance`
+  at 491,123 and 491,277, 2026-10-21. Used for
+  `conformance/vectors/frame-pool/fp-07-mined-transfer.json` and decision
+  record 0068.
+- **exp-frames** (branch `exp/48-bound-ticket` at `9a6427f`, read
+  2026-10-21): `exp-frames/experiments/48-bound-ticket/README.md`, a blind
+  ticket bound to its transaction through a one-time key, as CG-12 asks;
+  `BoundTicketPaymaster.yul`, the bound template, whose `VERIFY` frame
+  rebuilds the 152-byte message, checks the pairing and then scans the
+  signature list with `SIGPARAM`; and `record.json`, the bytes of every
+  transaction it sent and the testnet's answers. The bound paymaster
+  `0xca7aa9eb83846186c1562abab968d1568ad55228` and the version 5 one
+  `0x4687b01b7e3642144e1386a8c128bd16a8c722a9` by `eth_getCode` at block
+  493,609, 1,473 and 1,393 bytes, each ending in the same 256-byte key and
+  a 32-byte denomination of $10^{15}$ wei; the receipts of `0xf3a3e70e...`
+  (block 491,574), `0x2b193135...` (491,576) and `0x266284a1...` (491,578)
+  by `eth_getTransactionReceipt`, status 1, 2026-10-21. Used for CG-1 and
+  CG-10 of `docs/spec/10-claim-gated-admission.md` version 7,
+  `conformance/vectors/claim-gated/cg-12-experiment-48.json` and decision
+  record 0069.
 - **exp-frames** (branch `claude/nifty-einstein-llp9cd` at `f0749cb`, read
   2026-10-20): `exp-frames/experiments/36-blind-tickets/`, blind tickets issued by a
   threshold committee and paid for in a paymaster's `VERIFY` frame on the

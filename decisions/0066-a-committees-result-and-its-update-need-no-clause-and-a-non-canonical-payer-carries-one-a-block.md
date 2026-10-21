@@ -118,3 +118,32 @@ for decision record 0065, the clauses were read first.
   non-canonical paymaster: one result a block for each such paymaster.
 - The committee's own shapes, when they come, are judged against these
   vectors, as decision record 0054 judged `exp-frames`' mined pair.
+
+## Checked against the committee's fixed formats
+
+The committee's formats were fixed on 2026-10-21 (`exp-e2e-frames`, branch
+`tooling-committee` at `c8eb5cc`, `committee/bls-committee/README.md`). A
+result is Commonware's `ops::sign_message` for `MinSig` under
+`FRAME_FHE_RESULT_V1`. It signs 128 bytes, chain ID, request, handle and
+value. The signature is checked as a ticket's is, with another namespace
+and message. The vectors read it so:
+
+- **The gas.** A ticket paymaster's 122,006 gas stands for a result's
+  check. The two checks are the same, over messages of 132 and 128 bytes.
+- **The frame's data.** It is the request, the handle, the value and the
+  signature: 224 bytes.
+- **The request is the result's nonce key,** used once, at sequence 0, with
+  EIP-8250's 97,920 state gas.
+
+The format leaves the transaction's frames, nonce keys and payer to the run
+that builds it. The vectors keep their choices, and say so.
+
+**Two results for one request.** The committee's format guards against this
+with a lock on each request in each member. At the pool, two results for
+one request have one identity, so one is held. The second replaces the
+first only at the price bump, and once one is mined the others are too low.
+So at most one result for a request lands. A pool cannot tell which value
+is right, though: a second result that a corrupted quorum signed replaces
+the first if it pays more. Against two results, the lock is the guard
+before inclusion, and the nonce key after it
+(`conformance/vectors/frame-pool/fp-11-committee.json`).

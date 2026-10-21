@@ -1,21 +1,22 @@
 # 10. Claim-gated admission (proposal)
 
-Version 6, 2026-10-21. Version 1, 2026-10-13, had every node verify;
+Version 7, 2026-10-21. Version 1, 2026-10-13, had every node verify;
 version 2, the same day, added `verifies` and CG-7; version 3, 2026-10-20,
 added CG-8 to CG-10, the bytes a ticket signs, how a node verifies one and
 where a transaction carries it; version 4, the same day, recognises a
 ticket paymaster by its code rather than from a set a node holds; version
 5, the same day, accepts a ticket paymaster only under a bond, ERC-8421's
 stake and reputation (CG-11); version 6, 2026-10-21, binds a ticket to the
-transaction it pays for, through a one-time key the buyer chose (CG-12).
+transaction it pays for, through a one-time key the buyer chose (CG-12);
+version 7, the same day, names the bound template.
 
 **Status: proposal.** This document states, as clauses, an admission policy
 that no client implements and no EIP specifies: claim-gated admission,
 stated as six rules, R1 to R6, with a variant that remembers bad claims
 rather than slots, and with nodes that need not verify. Decision record 0037
 records the readings it rests on, decision record 0064 those of the bond,
-decision record 0067 those of the binding, and its vectors check the
-clauses. A clause marked *Interpretation* is this
+decision record 0067 those of the binding, decision record 0069 those of
+the bound template, and its vectors check the clauses. A clause marked *Interpretation* is this
 repository's reading where the rules leave a choice open, and names the
 decision record. The profile,
 `claim-gated`, is the specification of nothing but this document.
@@ -71,7 +72,7 @@ these changes and no others:
 | `verifies` | true | whether the node verifies proofs; a node with false is a relay (CG-7); a value of each node, not of the network; decision record 0038 |
 | `bond` | true | whether CG-11 applies; false under every other profile, and a profile with `claims` and without `bond` is version 4's admission; decision record 0064 |
 | `binding` | true | whether CG-12 applies; false under every other profile, and a profile with `claims` and without `binding` is version 5's admission; decision record 0067 |
-| `bound_template` | none | the bound template of CG-10, as its length and keccak256; none until one is fixed, and a profile with none has no bound ticket paymaster; decision record 0067 |
+| `bound_template` | 1,185 bytes, keccak256 `0x52c656815e560bb189c3fb362c9628432ca1ed6b720e239857775236c18bc1d3` | the bound template of CG-10, as its length and keccak256; a profile that names none has no bound ticket paymaster; decision records 0067 and 0069 |
 
 Every AG-1 parameter is `eip-8288`'s. Under `bond`, CG-11 reads seven of
 AM-1's parameters (`14-erc-8421.md`), with the values
@@ -315,6 +316,11 @@ $T$, `kohaku-rs` at `eea02a3`, `crates/frame-ticket/contracts/TicketPaymaster.he
 after its 25-byte constructor, whose `TicketPaymaster.yul` appends the key
 and a 32-byte denomination to the code it deploys; the same bytes are the
 code of `0x273795f6eb2730d50c3544cbef1e0c1adba4f541` on the Hegota testnet.
+For $T_b$, `exp-frames` branch `exp/48-bound-ticket` at `9a6427f`,
+`exp-frames/experiments/48-bound-ticket/BoundTicketPaymaster.yul`, which
+appends the key and the denomination to the code it deploys; the same
+1,185 bytes begin the code of `0xca7aa9eb83846186c1562abab968d1568ad55228`
+on the Hegota testnet, read at block 493,609.
 *Interpretation:* a node recognises a ticket paymaster by its code, with no
 list and no registry, as the owner ruled; decision record 0057. The frame
 names the key, so a ticket carries no key of its own and a node checks one
@@ -323,10 +329,12 @@ paymaster's verdict by its code hash, since the code decides it. A
 transaction names the slot and the chain, so the frame carries only the
 epoch, the salt and the signature, and the binder when the ticket names
 one. A ticket to any other account is no claim at all, and CG-2 judges the
-transaction without one. The bound template is the one that rebuilds the
-152-byte message and checks the binding as CG-12 does; until its code is
-fixed, `claim-gated` names none, and every ticket a node there reads is
-unbound; decision record 0067.
+transaction without one. The bound template rebuilds the 152-byte message,
+checks CG-9's pairing, and then reads every entry of the transaction's
+signature list with `SIGPARAM`, scheme first, for one whose scheme is
+`secp256k1`, whose `msg` is empty and whose resolved signer is the binder:
+CG-12's steps 1 and 2, with step 3 left to the protocol; decision records
+0067 and 0069.
 
 What a junk proof then costs its sender, read from these clauses: anyone
 can deploy the template with a key of their own and sign their own
@@ -524,11 +532,18 @@ claim without CG-9's pairing.
   learns which of its peers verify.
 - A recursive STARK that does not verify, and the nodes that send one: the
   claims bind proofs a node verifies directly.
-- The bound template's code, and what checking the binding in its `VERIFY`
-  frame costs. CG-1's `bound_template` names it once it is fixed; until
-  then, `claim-gated` reads every ticket as unbound. The binding's
+- What the bound template's `VERIFY` frame costs: 122,233 and 122,350 gas
+  on the Hegota testnet, against the version 5 template's 122,006
+  (`exp-frames` experiment 48), so a bound ticket fits `eip-8141`'s
+  `max_verify_gas` no better than an unbound one did. The binding's
   signature adds 2,800 gas to the transaction's verification cost (FEE-4),
   which FP-6 counts against `max_verify_gas`.
+- What the bound template checks beyond CG-9 and CG-12: that its frame's
+  scope is `PAYMENT`, that the transaction's `max_cost` is at most its
+  denomination, and that the binder is not zero. A node takes these from
+  the client's verdict on the prefix (`11-surface.md`, SF-4). The template
+  reads no epoch and keeps no record: CG-2's step 4 and CG-4 to CG-6 are a
+  node's alone (decision record 0069).
 - How a buyer derives its one-time keys, and what a wallet must keep to
   spend a ticket it bought: CG-12 reads only the address in the message and
   the signature in the transaction.
@@ -568,3 +583,12 @@ claim without CG-9's pairing.
   CG-7 and CG-11 hold unchanged and now say version 6; so do CG-8's, CG-9's
   and CG-10's, whose claims have no binder. CG-12's are new, and CG-8's,
   CG-9's and CG-10's gain cases with a binder.
+- **Version 7.** CG-1's `bound_template` under `claim-gated` is no longer
+  none: it names `exp-frames` experiment 48's template, 1,185 bytes, which
+  CG-10 cites. No rule changes. The vectors of CG-2 to CG-12 set a template
+  of their own where they read one, so they hold unchanged and now say
+  version 7. CG-12's gain the transactions experiment 48 sent to the
+  testnet, mined and refused, read under the profile's own template, and
+  cases for the entries a bound template must skip; CG-12's pool vectors
+  gain a holder's re-pricing and an epoch that ends while a ticket is
+  pending (decision record 0069).
