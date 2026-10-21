@@ -235,7 +235,9 @@ they added; their experiments are not part of this repository.
     record 0064), at `3518573` on the session branch, in its own pull
     request,
     [4w44h9jckz-boop/exp-mempool-l2s#6](https://github.com/4w44h9jckz-boop/exp-mempool-l2s/pull/6),
-    after the `base` and experiment 26 pull requests.
+    after the `base` and experiment 26 pull requests. *Finished,
+    2026-10-21:* #4, #5 and #6 merged; `main` at `ff529ef`, and `base`
+    fast-forwarded to it.
 
 44. **An ERC-8421 profile.** Read from ERC-8421: stake and reputation for
     paymasters and other operators, and what a fresh sender is asked for.
