@@ -87,7 +87,7 @@ class FramePoolConfig:
     verifies: bool = True  # CG-7: false makes the node a relay, which verifies no proof
     bond: bool = False  # CG-11: a bond on the ticket paymaster, with AM-1's stake and reputation parameters below
     binding: bool = False  # CG-12: a claim must be bound to its transaction by its binder's signature
-    bound_template_length: int | None = None  # CG-10: the bound template's length and keccak256, none until fixed
+    bound_template_length: int | None = None  # CG-10: the bound template's length and keccak256, or none
     bound_template_keccak: str | None = None
     # 14-erc-8421.md, AM-1, read when ruleset is "erc-8421", and the stake and reputation ones under `bond` (CG-11);
     # a descriptor sets them (13-descriptors.md, DS-6)
@@ -135,7 +135,9 @@ EIP_8272 = FramePoolConfig(name="eip-8272", recent_roots=True)
 
 EIP_8266 = FramePoolConfig(name="eip-8266", expiring=True)
 
-CLAIM_GATED = EIP_8288.with_(name="claim-gated", claims=True, bond=True, binding=True)
+# CG-1: the bound template is exp-frames experiment 48's (10-claim-gated-admission.md version 7)
+CLAIM_GATED = EIP_8288.with_(name="claim-gated", claims=True, bond=True, binding=True, bound_template_length=1185,
+                             bound_template_keccak="0x52c656815e560bb189c3fb362c9628432ca1ed6b720e239857775236c18bc1d3")
 
 PROFILES = {c.name: c for c in (EIP_8141, HEGOTA_TESTNET, MATCHA, EIP_8288, EIP_8288_MASTER, EIP_8272, EIP_8266,
                                  CLAIM_GATED)}

@@ -55,7 +55,13 @@ says is checked against the primary source before it is relied on.
   Hash", "Transaction Signatures" and `validate_signature` are the same, so
   frame data, `VERIFY` frames' included, stays inside the signature hash,
   and `SIGPARAM`'s table only gains a name for each parameter. Used for
-  decision record 0067, point 8.
+  decision record 0067, point 8. Read again at the same commit later the
+  same day: Constraints (an explicit `msg` must be 32 bytes and not 32 zero
+  bytes), Signature Validation (`validate_signature` for `P256`: low `s`,
+  and the signer is the last 20 bytes of the keccak256 of $q_x \Vert q_y$),
+  and `SIGPARAM` (which halts on an `ARBITRARY` entry's resolved signer).
+  Used for decision record 0069 and
+  `conformance/vectors/claim-gated/cg-12-binder-entries.json`.
 - **EIP-8250, Keyed Nonces for Frame Transactions**, Draft, same commit, read
   2026-10-07. Sections: Mempool, Rationale. Used for FP-7 and FP-12. Read
   again the same day for experiment 02: Constants
@@ -749,6 +755,22 @@ says is checked against the primary source before it is relied on.
   at 491,123 and 491,277, 2026-10-21. Used for
   `conformance/vectors/frame-pool/fp-07-mined-transfer.json` and decision
   record 0068.
+- **exp-frames** (branch `exp/48-bound-ticket` at `9a6427f`, read
+  2026-10-21): `exp-frames/experiments/48-bound-ticket/README.md`, a blind
+  ticket bound to its transaction through a one-time key, as CG-12 asks;
+  `BoundTicketPaymaster.yul`, the bound template, whose `VERIFY` frame
+  rebuilds the 152-byte message, checks the pairing and then scans the
+  signature list with `SIGPARAM`; and `record.json`, the bytes of every
+  transaction it sent and the testnet's answers. The bound paymaster
+  `0xca7aa9eb83846186c1562abab968d1568ad55228` and the version 5 one
+  `0x4687b01b7e3642144e1386a8c128bd16a8c722a9` by `eth_getCode` at block
+  493,609, 1,473 and 1,393 bytes, each ending in the same 256-byte key and
+  a 32-byte denomination of $10^{15}$ wei; the receipts of `0xf3a3e70e...`
+  (block 491,574), `0x2b193135...` (491,576) and `0x266284a1...` (491,578)
+  by `eth_getTransactionReceipt`, status 1, 2026-10-21. Used for CG-1 and
+  CG-10 of `docs/spec/10-claim-gated-admission.md` version 7,
+  `conformance/vectors/claim-gated/cg-12-experiment-48.json` and decision
+  record 0069.
 - **exp-frames** (branch `claude/nifty-einstein-llp9cd` at `f0749cb`, read
   2026-10-20): `exp-frames/experiments/36-blind-tickets/`, blind tickets issued by a
   threshold committee and paid for in a paymaster's `VERIFY` frame on the

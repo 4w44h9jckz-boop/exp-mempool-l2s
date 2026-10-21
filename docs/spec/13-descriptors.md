@@ -1,9 +1,10 @@
 # 13. Descriptors: a ruleset as a file a node loads
 
-Version 3, 2026-10-21. Version 2, 2026-10-20, adds the module `CG-11`,
+Version 4, 2026-10-21. Version 2, 2026-10-20, adds the module `CG-11`,
 the bond of `10-claim-gated-admission.md` version 5; version 3 adds the
 module `CG-12`, the binding of its version 6, and the bound template to
-`CG-10`.
+`CG-10`; version 4 names that template in `claim-gated.json`, as its
+version 7 does.
 
 **Status: proposal.** EIP-8141 fixes one public mempool's rules, and
 ERC-8421 lets nodes agree on others: "Each alternative mempool is identified
@@ -229,3 +230,9 @@ and so does this document.
   `claim-gated.json`, and for three descriptors of DS-6's vectors that
   write `CG-10` out, which gain its two parameters so as to fail where they
   failed before; DS-4 gains three cases (decision record 0067).
+- **Version 4.** `claim-gated.json` sets `CG-10`'s two bound-template
+  parameters to the template `10-claim-gated-admission.md` version 7 names,
+  1,185 bytes, and its identifier changes (DS-8). No rule of this document
+  changes. The vectors of DS-1 to DS-8 hold and now say version 4, but for
+  the identifier and the profile of `claim-gated.json`, which change with
+  the file (decision record 0069).
