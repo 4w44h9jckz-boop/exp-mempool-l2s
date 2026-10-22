@@ -451,8 +451,9 @@ class FramePool:
                 if victim is None:
                     raise TxError(E.ErrTxPoolOverflow)
                 self._remove(victim, "capacity")
-            if old_hash is not None:
-                self._remove(old_hash, "replaced", release=False)
+            if old_hash is not None:  # CG-6 under `binding`: the holder's re-pricing is no removal
+                same = self.config.binding and tx.claim is not None and tx.claim == self.entries[old_hash].tx.claim
+                self._remove(old_hash, "replaced", release=False, keep_claim=same)
             if self.matcha:
                 if baseline:
                     self.bases.add(tx.hash)
@@ -639,7 +640,8 @@ class FramePool:
         self._see(tx)  # CG-11
         self.log.append(("pending", tx, "admitted"))
 
-    def _remove(self, tx_hash: str, reason: str, release: bool = True, account: bool = True) -> None:
+    def _remove(self, tx_hash: str, reason: str, release: bool = True, account: bool = True,
+                keep_claim: bool = False) -> None:
         e = self.entries.pop(tx_hash)
         tx = e.tx
         self.dropped[reason] += 1
@@ -672,6 +674,6 @@ class FramePool:
         self._index(e, -1)
         if reason == "stale_nonce" and tx.hash in self._counted:  # CG-11: included
             self._bump(self.ticket_paymaster(tx), included=+1)
-        if self.config.claims and tx.claim is not None and reason != "stale_nonce":  # CG-6
+        if self.config.claims and tx.claim is not None and reason != "stale_nonce" and not keep_claim:  # CG-6
             self.expired_claims[tx.claim] = max(self.expired_claims.get(tx.claim, tx.claim.epoch), tx.claim.epoch)
         self.log.append(("dropped", tx, reason))

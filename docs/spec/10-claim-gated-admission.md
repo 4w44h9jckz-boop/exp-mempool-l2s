@@ -1,6 +1,6 @@
 # 10. Claim-gated admission (proposal)
 
-Version 7, 2026-10-21. Version 1, 2026-10-13, had every node verify;
+Version 8, 2026-10-21. Version 1, 2026-10-13, had every node verify;
 version 2, the same day, added `verifies` and CG-7; version 3, 2026-10-20,
 added CG-8 to CG-10, the bytes a ticket signs, how a node verifies one and
 where a transaction carries it; version 4, the same day, recognises a
@@ -8,7 +8,8 @@ ticket paymaster by its code rather than from a set a node holds; version
 5, the same day, accepts a ticket paymaster only under a bond, ERC-8421's
 stake and reputation (CG-11); version 6, 2026-10-21, binds a ticket to the
 transaction it pays for, through a one-time key the buyer chose (CG-12);
-version 7, the same day, names the bound template.
+version 7, the same day, names the bound template; version 8, the same
+day, lets the holder of a bound ticket re-price its transaction (CG-6).
 
 **Status: proposal.** This document states, as clauses, an admission policy
 that no client implements and no EIP specifies: claim-gated admission,
@@ -16,7 +17,8 @@ stated as six rules, R1 to R6, with a variant that remembers bad claims
 rather than slots, and with nodes that need not verify. Decision record 0037
 records the readings it rests on, decision record 0064 those of the bond,
 decision record 0067 those of the binding, decision record 0069 those of
-the bound template, and its vectors check the clauses. A clause marked *Interpretation* is this
+the bound template, decision record 0080 those of a holder's re-pricing,
+and its vectors check the clauses. A clause marked *Interpretation* is this
 repository's reading where the rules leave a choice open, and names the
 decision record. The profile,
 `claim-gated`, is the specification of nothing but this document.
@@ -182,13 +184,22 @@ arrives in an aggregate has no proof of its own to verify (AG-5, mode 1).
 
 **CG-6. No second admission (R6).** When the pool removes a transaction that
 carries a claim for any reason but that its nonce was consumed (FP-15
-step 1), the node records its slot and claim with the claim's epoch $e$.
-While the epoch of its head is at most $e$, the pool MUST reject, after
-CG-4, a transaction whose slot and claim are recorded, with
-`ErrClaimExpired`. **Source:** decision record 0037. Rule R6: an
-$(S, n, \tau)$ that has expired is not admitted again during $e$.
-*Interpretation:* the clause counts every removal that leaves the slot open,
-a replacement and an eviction included, decision record 0037.
+step 1), the node records its slot and claim with the claim's epoch $e$,
+except that under `binding` it records nothing when FP-12 replaces the
+transaction with one that carries the same claim. While the epoch of its
+head is at most $e$, the pool MUST reject, after CG-4, a transaction whose
+slot and claim are recorded, with `ErrClaimExpired`. **Source:** decision
+record 0037. Rule R6: an $(S, n, \tau)$ that has expired is not admitted
+again during $e$. *Interpretation:* the clause counts every removal that
+leaves the slot open, a replacement and an eviction included, decision
+record 0037. Under `binding`, only the holder of a ticket's one-time key can
+make a transaction whose claim is bound (CG-12), so a replacement under the
+same claim is the holder's re-pricing, and it is not counted. Each
+re-pricing still pays FP-12's bump, and a bound ticket paymaster refuses a
+`max_cost` above its denomination, which a node learns from the client's
+verdict (SF-4), so a holder re-prices a bounded number of times. A
+replacement under another claim, and any removal under a profile without
+`binding`, is counted as before; decision record 0080.
 
 ## Relays
 
@@ -592,3 +603,11 @@ claim without CG-9's pairing.
   cases for the entries a bound template must skip; CG-12's pool vectors
   gain a holder's re-pricing and an epoch that ends while a ticket is
   pending (decision record 0069).
+- **Version 8.** Under `binding`, CG-6 no longer records a transaction FP-12
+  replaces with one that carries the same claim, so the holder of a bound
+  ticket may re-price its transaction at each bump. CG-5 is unchanged, so a
+  transaction with a dependency still re-prices only under a new ticket.
+  CG-12's pool vector of a holder's re-pricing changes with it, and CG-6's
+  vectors gain the cases that tell a holder's re-pricing from a replacement
+  under another ticket and from a profile without `binding`; every other
+  vector holds unchanged and now says version 8 (decision record 0080).

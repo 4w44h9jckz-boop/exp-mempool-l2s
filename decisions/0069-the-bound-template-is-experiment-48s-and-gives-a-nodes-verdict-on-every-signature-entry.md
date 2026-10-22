@@ -1,6 +1,7 @@
 # 0069. The bound template is experiment 48's, and gives a node's verdict on every signature entry
 
-Date: 2026-10-21. Status: accepted.
+Date: 2026-10-21. Status: accepted; point 3's second re-pricing is changed
+by decision record 0080.
 
 ## Context
 
