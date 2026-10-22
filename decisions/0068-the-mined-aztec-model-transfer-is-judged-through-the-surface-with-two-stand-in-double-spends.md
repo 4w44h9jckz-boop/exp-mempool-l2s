@@ -55,6 +55,10 @@ Two things the vectors need are not in the record:
      note is spent beside another. `ErrFrameSenderBusy` while the transfer
      is pending, and `ErrNonceTooLow` after the block.
 
+   The first stand-in also comes with both fees raised by the bump, the tip
+   from 1 to 2 and `max_fee` from 100 to 110. That one replaces the
+   transfer (FP-12), and block 491,278 then drops it. Added 2026-10-22.
+
    Their verdict is `valid`, as decision record 0054's stand-in was. FP-12
    and FP-7 read only the identity, the keys and the fees. A real double
    spend would carry a proof of its own, which the client would judge.
