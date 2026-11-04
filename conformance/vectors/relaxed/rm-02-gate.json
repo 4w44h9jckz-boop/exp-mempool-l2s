@@ -722,7 +722,15 @@
          "exec_gas": 50000
         }
        ],
-       "max_fee": 1000000000000
+       "max_fee": 1000000000000,
+       "claim": {
+        "sender": "bob",
+        "nonce_seq": 0,
+        "epoch": 2,
+        "salt": "t2",
+        "binder": "b1",
+        "bound": false
+       }
       }
      ],
      "expect": [
@@ -730,7 +738,7 @@
      ]
     }
    ],
-   "derivation": "B reads nothing outside bob, and its max_cost, 96838 * 10^12, is above bob's balance: FP-8 refuses, a code no relaxation answers, so it stands (RM-2)."
+   "derivation": "B reads nothing outside bob, carries an unbound claim, and its max_cost, 96838 * 10^12, is above bob's balance. The canonical modules read no claim and refuse at FP-8, a code no relaxation answers, so it stands (RM-2). The whole descriptor would have refused first at CG-12, with ErrClaimUnbound."
   },
   {
    "name": "after a relaxable refusal, the second judgement's code is the answer",

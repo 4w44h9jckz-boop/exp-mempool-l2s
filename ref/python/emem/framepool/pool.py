@@ -97,6 +97,7 @@ class FramePool:
         self.declarations_refreshed = 0  # RM-6: how many refreshes the pool's time has passed
         self.forwarded: set = set()  # RM-8: the claims a relay has forwarded
         self._relaxing = False  # RM-2: the second judgement is running
+        self._judged = False  # RM-2: and the first ran, and counted the prefix's work
         self._marks: set[str] = set()  # RM-2: the relaxations the running judgement has used
         self._relies: set[str] = set()  # RM-6: the declared codes it has relied on
         self._sim: Simulation | None = None  # the running judgement's simulation, for RM-4
@@ -307,10 +308,10 @@ class FramePool:
             raise TxError(E.ErrAlreadyKnown)
         prefix = check_static(tx, self.head, self.config)  # FP-3 to FP-6, AG-2 to AG-4
         self._check_claim(tx)
-        self.work[tx.sender] += admission_gas(tx, prefix)
         if self.config.relaxed and self.config.tier == "relay":
             check_nonce(tx, self.state)  # FP-7, the relay's state
         else:
+            self.work[tx.sender] += admission_gas(tx, prefix)
             self._simulate(tx, prefix, self.head, self.state, relax=self.config.relaxed)  # FP-7 to FP-10
         if tx.claim is not None and tx.claim in self.used_claims:  # CG-5
             raise TxError(E.ErrClaimUsed)
@@ -431,7 +432,8 @@ class FramePool:
             return self._admit(tx, now)
         if self.config.tier == "relay":
             return self._relay(tx, now)
-        if not any(f.mode == self.config.dep_frame_mode for f in tx.frames):
+        judged = not any(f.mode == self.config.dep_frame_mode for f in tx.frames)
+        if judged:
             self.config = self._canon
             try:
                 code = self._admit(tx, now)
@@ -439,11 +441,11 @@ class FramePool:
                 self.config = self._full
             if code not in RELAXABLE:
                 return code
-        self._relaxing = True
+        self._relaxing, self._judged = True, judged
         try:
             return self._admit(tx, now)
         finally:
-            self._relaxing = False
+            self._relaxing = self._judged = False
 
     def _admit(self, tx: FrameTx, now: float = 0) -> str:
         self._marks, self._relies, self._sim = set(), set(), None
@@ -456,7 +458,7 @@ class FramePool:
             if self.config.dependency_frames and not all(d in self.proven or d in self.relayed
                                                           for d in dependencies(tx, self.config)):  # AG-6, CG-7 step 3
                 raise TxError(E.ErrFrameDepsUnproven)
-            if not self._relaxing:  # RM-2's second judgement runs no prefix that was not counted
+            if not self._judged:  # RM-2: a prefix the first judgement ran is counted once
                 self.work[tx.sender] += admission_gas(tx, prefix)
             old_hash = None if self._many(tx) else self.by_identity.get((tx.sender, tx.nonce_keys, tx.nonce_seq))
             old = self.entries[old_hash] if old_hash is not None else None

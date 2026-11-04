@@ -472,10 +472,16 @@
        "frames": [
         {
          "mode": 1,
-         "flags": 3,
+         "flags": 2,
          "exec_gas": 30000,
-         "approves": 3,
-         "reads": []
+         "approves": 2
+        },
+        {
+         "mode": 1,
+         "flags": 1,
+         "target": "tpm",
+         "exec_gas": 30000,
+         "approves": 1
         },
         {
          "mode": 2,
@@ -493,7 +499,7 @@
      ]
     }
    ],
-   "derivation": "alice's code, account-v1, has no declaration (RM-4 item 2)."
+   "derivation": "A2 is paid by tpm, whose declared outflow bound, 12,731,300, A2's max_cost meets, so RM-4 item 3 holds. alice's code, account-v1, has no declaration, so item 2 refuses."
   },
   {
    "name": "an account with no code keeps one",
@@ -616,16 +622,18 @@
        "label": "E2",
        "type": 6,
        "sender": "eoa",
-       "signatures": [
-        {
-         "scheme": "secp256k1"
-        }
-       ],
        "frames": [
         {
          "mode": 1,
-         "flags": 3,
+         "flags": 2,
          "exec_gas": 30000
+        },
+        {
+         "mode": 1,
+         "flags": 1,
+         "target": "tpm",
+         "exec_gas": 30000,
+         "approves": 1
         },
         {
          "mode": 2,
@@ -634,6 +642,11 @@
        ],
        "nonce_keys": [
         2
+       ],
+       "signatures": [
+        {
+         "scheme": "secp256k1"
+        }
        ]
       }
      ],
@@ -643,7 +656,7 @@
      ]
     }
    ],
-   "derivation": "eoa has empty code, which no declaration covers (RM-1), so its code could change."
+   "derivation": "E2 is paid by tpm, which meets RM-4 item 3 as above. eoa has empty code, which no declaration covers (RM-1), so its code could change, and item 2 refuses."
   },
   {
    "name": "a delegated account keeps one",
@@ -766,10 +779,16 @@
        "frames": [
         {
          "mode": 1,
-         "flags": 3,
+         "flags": 2,
          "exec_gas": 30000,
-         "approves": 3,
-         "reads": []
+         "approves": 2
+        },
+        {
+         "mode": 1,
+         "flags": 1,
+         "target": "tpm",
+         "exec_gas": 30000,
+         "approves": 1
         },
         {
          "mode": 2,
@@ -787,7 +806,7 @@
      ]
     }
    ],
-   "derivation": "deleg's code is an EIP-7702 delegation, which has no declaration (RM-1)."
+   "derivation": "D2 is paid by tpm, which meets RM-4 item 3 as above. deleg's code is an EIP-7702 delegation, which has no declaration (RM-1), so item 2 refuses."
   },
   {
    "name": "a relaxed transaction reads only declared slots of its sender",
