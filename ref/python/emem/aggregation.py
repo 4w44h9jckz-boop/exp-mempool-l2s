@@ -1,7 +1,8 @@
 """In-mempool aggregation (EIP-8288) at one node: `docs/spec/05-aggregation.md`, AG-5 to AG-7, AG-9 and AG-10, and
 CG-3 to CG-5 and CG-7 of `10-claim-gated-admission.md` under `claims`.
 
-Nothing here proves anything. A proof is a flag, and a recursive STARK is the
+Nothing here proves anything unless the node names a prover (AG-11, decision record 0083), a command it runs to
+fold and check leanSPHINCS signatures. Otherwise a proof is a flag, and a recursive STARK is the
 list of dependencies whose hash is its public input, with a flag; a node can
 aggregate any subset of what it has proven, because the EIP's circuit takes
 recursive proofs and removes discards. Decision record 0012. Proving time is
@@ -14,8 +15,13 @@ record 0037).
 
 from __future__ import annotations
 
+import json
+import re
+import subprocess
+import tempfile
 from collections import Counter
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable
 
 from . import errors as E
@@ -31,6 +37,7 @@ class Stark:
 
     covers: tuple[Dependency, ...]
     valid: bool = True
+    proof: bytes | None = None  # AG-11: its bytes, under a node's prover
 
 
 @dataclass(frozen=True)
@@ -43,6 +50,54 @@ class Wrapper:
     proofs: tuple[bool, ...] = ()  # mode 0: whether each triple's proof verifies
     stark: Stark | None = None  # mode 1
     signed: tuple[bool, ...] = ()  # mode 0, CG-3: whether each proof is the one its sender signed; () if all are
+    witnesses: tuple[str, ...] = ()  # mode 0, AG-11: each triple's signature as hex, "" for none; () if none
+
+
+HEX32 = re.compile(r"0x[0-9a-fA-F]{64}")
+
+
+class Prover:
+    """AG-11: a real prover, run as a command with the contract of `exp-e2e-frames` experiment 19's prover at
+    `47f5496`: one JSON line printed, a refusal as {"error": ...} with exit status 2."""
+
+    def __init__(self, command: str):
+        self.command = command
+
+    @staticmethod
+    def foldable(d: Dependency) -> bool:
+        """Item 1: a leanSPHINCS triple whose key and message are 32 bytes of hex."""
+        return d.scheme == LEANSPHINCS and bool(HEX32.fullmatch(d.vk_hash)) and bool(HEX32.fullmatch(d.data_hash))
+
+    def _run(self, *args: str) -> dict | None:
+        out = subprocess.run([self.command, *args], capture_output=True, text=True)
+        lines = out.stdout.strip().splitlines()
+        try:
+            answer = json.loads(lines[-1]) if lines else {}
+        except ValueError:
+            return None
+        if out.returncode != 0 or not isinstance(answer, dict) or "error" in answer:
+            return None
+        return answer
+
+    def aggregate(self, claims: list[tuple[Dependency, str]]) -> tuple[bytes, float, int] | None:
+        """`aggregate`: the recursive STARK's bytes, its measured ms and peak memory, or None for a refusal."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path, out = Path(tmp, "claims.json"), Path(tmp, "out.bin")
+            path.write_text(json.dumps([{"publicKey": d.vk_hash, "message": d.data_hash, "signature": w}
+                                        for d, w in claims]))
+            answer = self._run("aggregate", str(path), str(out))
+            if answer is None or not out.exists():
+                return None
+            return out.read_bytes(), float(answer.get("aggregateMs", 0)), int(answer.get("peakRssBytes", 0))
+
+    def verify(self, proof: bytes, deps: tuple[Dependency, ...]) -> bool:
+        """`verify-aggregate`: whether the bytes cover exactly these triples."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path, claims = Path(tmp, "proof.bin"), Path(tmp, "claims.json")
+            path.write_bytes(proof)
+            claims.write_text(json.dumps([{"publicKey": d.vk_hash, "message": d.data_hash} for d in deps]))
+            answer = self._run("verify-aggregate", str(path), str(claims))
+            return answer is not None and answer.get("verified") is True
 
 
 def wrap(txs: list[FrameTx], mode: int = 0, cfg=None) -> Wrapper:
@@ -71,6 +126,8 @@ class Aggregator:
         self.folded: set[Dependency] = set()  # every triple its aggregates have listed
         self.work: Counter = Counter()  # by event, as `_count` names them (decision record 0037)
         self.observe: Callable[[str, FrameTx | None], None] | None = None  # told of each event and its transaction
+        self.witnesses: dict[Dependency, str] = {}  # AG-11: each leanSPHINCS triple's signature, from mode 0
+        self.measured: tuple[float, int] | None = None  # AG-11: the last aggregate's ms and peak bytes, by its prover
 
     def _count(self, event: str, tx: FrameTx | None = None) -> None:
         """Decision record 0037: `check`, a transaction's admission checks run, its signature and claim among
@@ -137,7 +194,12 @@ class Aggregator:
                     raise TxError(E.ErrWrapperProof)
             else:
                 self._count("stark")
-                if not wrapper.stark.valid:
+                if cfg.prover is not None:  # AG-11 item 3
+                    stark = wrapper.stark
+                    if stark.proof is None or not all(Prover.foldable(d) for d in wrapper.deps) \
+                            or not Prover(cfg.prover).verify(stark.proof, wrapper.deps):
+                        raise TxError(E.ErrWrapperProof)
+                elif not wrapper.stark.valid:
                     raise TxError(E.ErrWrapperProof)
         except TxError as err:
             return err.code
@@ -147,6 +209,9 @@ class Aggregator:
             frame.proven.update(wrapper.deps)
             if wrapper.mode == 0:
                 self.direct.update(wrapper.deps)
+                for d, w in zip(wrapper.deps, wrapper.witnesses):  # AG-11 item 2
+                    if w and d.scheme == LEANSPHINCS:
+                        self.witnesses[d] = w
             else:
                 for d in wrapper.deps:
                     self.first_cover.setdefault(d, wrapper)
@@ -178,6 +243,8 @@ class Aggregator:
         owned = {h: dependencies(e.tx, cfg) for h, e in held.items()}  # AG-4 under the profile
         received, self.received = self.received, []
         self.proving_time, self.memory, self.inputs, self.verified = 0, 0, 0, 0
+        self.measured = None
+        prover = Prover(cfg.prover) if cfg.prover is not None else None
         if not held or (cfg.claims and (not cfg.verifies or (cfg.relaxed and cfg.tier == "relay"))):  # CG-7 step 5, RM-8
             self.previous, self.previous_deps = [], ()
             return None
@@ -197,6 +264,8 @@ class Aggregator:
             nonlocal direct, time, memory
             if h in chosen or h not in held:
                 return
+            if prover is not None and not all(Prover.foldable(d) and d in self.witnesses for d in owned[h]):
+                return  # AG-11 item 4: only the signatures it holds
             tx = held[h].tx
             more = deps.union(owned[h])
             if cfg.cap_aggregates:
@@ -207,6 +276,9 @@ class Aggregator:
             verify: set[Dependency] = set()
             for d in owned[h]:
                 if d in covered or d in verify or any(d in c for c in inputs.values()):
+                    continue
+                if prover is not None:  # AG-11 item 4: every triple verified directly
+                    verify.add(d)
                     continue
                 if d in previous_cover:  # 1
                     key, cover = 0, self.previous_deps
@@ -256,6 +328,14 @@ class Aggregator:
         if not listed:
             self.previous, self.previous_deps = [], ()
             return None
+        proof = None
+        if prover is not None:  # AG-11 item 4
+            made = prover.aggregate([(d, self.witnesses[d]) for d in sorted(deps)])
+            if made is None:
+                self.previous, self.previous_deps = [], ()
+                return None
+            proof, ms, peak = made
+            self.measured = (ms, peak)
         for h in listed:
             for d in owned[h]:
                 if d not in self.folded:
@@ -267,4 +347,4 @@ class Aggregator:
         covered_deps = tuple(sorted(deps))
         self.previous_deps = covered_deps
         self.proving_time, self.memory, self.inputs, self.verified = time, memory, len(taken), direct
-        return Wrapper(entries, 1, covered_deps, stark=Stark(covered_deps))
+        return Wrapper(entries, 1, covered_deps, stark=Stark(covered_deps, proof=proof))

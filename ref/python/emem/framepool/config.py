@@ -116,6 +116,8 @@ class FramePoolConfig:
     throttled_count: int = 4  # RM-6
     declaration_refresh_seconds: int = 3600  # RM-6
     tier: str = "verifier"  # RM-8: `relay`, `verifier` or `aggregator`, a node's setting
+    # 05-aggregation.md, AG-11
+    prover: str | None = None  # a node's setting: the command of a real prover, or None for the model's flags
 
     def with_(self, **changes) -> FramePoolConfig:
         if "declarations" in changes:

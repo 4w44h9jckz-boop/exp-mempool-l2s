@@ -122,9 +122,11 @@ def make_wrapper(d: dict, cfg=None) -> Wrapper:
     stark = None
     if d["mode"] != 0:
         s = d.get("stark", {})
-        stark = Stark(make_deps(s["covers"]) if "covers" in s else deps, s.get("valid", True))
+        stark = Stark(make_deps(s["covers"]) if "covers" in s else deps, s.get("valid", True),
+                      bytes.fromhex(s["proof"].removeprefix("0x")) if "proof" in s else None)  # AG-11
     signed = tuple(d.get("signed", ()))
-    return Wrapper(tuple(entries), d["mode"], deps, proofs if d["mode"] == 0 else (), stark, signed)
+    witnesses = tuple(d.get("witnesses", ()))  # AG-11
+    return Wrapper(tuple(entries), d["mode"], deps, proofs if d["mode"] == 0 else (), stark, signed, witnesses)
 
 
 def make_tx(d: dict):
@@ -254,6 +256,8 @@ def run_pool(case: dict) -> None:
     profile = compile_config(loaded) if loaded else PROFILES[case.get("profile", EIP_8141.name)]
     nonce_cfg = GETH.with_(**config.get("nonce", {}))
     frame_cfg = profile.with_(**config.get("frame", {}))
+    if frame_cfg.prover == "stub":  # AG-11: the stub of the prover's contract (decision record 0083)
+        frame_cfg = frame_cfg.with_(prover=str(Path(__file__).resolve().parent / "prover-stub.py"))
     sealed_cfg = SEALED_PROFILES[case.get("sealed", "off")].with_(**config.get("sealed", {}))
     focil_cfg = FOCIL_PROFILES[case.get("focil", "off")].with_(**config.get("focil", {}))
     head_d = dict(DEFAULT_HEAD)
@@ -307,6 +311,13 @@ def run_pool(case: dict) -> None:
                                f"got {aggregator.proving_time}")
             if "expect_memory" in step and aggregator.memory != step["expect_memory"]:
                 raise Mismatch(f"{where}: aggregate memory expected {step['expect_memory']}, got {aggregator.memory}")
+            if "expect_proof" in step:  # AG-11
+                got = "0x" + w.stark.proof.hex() if w.stark.proof is not None else None
+                if got != step["expect_proof"]:
+                    raise Mismatch(f"{where}: aggregate proof expected {step['expect_proof']}, got {got}")
+            if "expect_measured" in step and list(aggregator.measured or ()) != step["expect_measured"]:
+                raise Mismatch(f"{where}: aggregate measured expected {step['expect_measured']}, "
+                               f"got {aggregator.measured}")
         elif "reset" in step:
             now = step.get("now", now)
             head_d.update(step["reset"].get("head", {}))

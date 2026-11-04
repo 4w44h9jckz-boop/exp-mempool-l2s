@@ -78,3 +78,4 @@ and says so.
 | [0080](0080-the-holder-of-a-bound-ticket-may-re-price-its-transaction.md) | The holder of a bound ticket may re-price its transaction |
 | [0081](0081-a-relaxed-alternative-mempool-behind-the-canonical-rules-with-declarations-reputation-and-three-tiers.md) | A relaxed alternative mempool behind the canonical rules, with declarations, reputation and three tiers |
 | [0082](0082-many-pending-per-sender-and-the-payers-count-lifted-are-bounded-by-a-declared-contract-and-a-reserve.md) | Many pending per sender and the payer's count lifted are bounded by a declared contract and a reserve |
+| [0083](0083-a-node-names-a-real-prover-and-folds-only-the-signatures-it-holds.md) | A node names a real prover, and folds only the signatures it holds |

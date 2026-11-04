@@ -765,6 +765,15 @@ says is checked against the primary source before it is relied on.
   format (fixed)". Used for
   `conformance/vectors/frame-pool/fp-11-committee.json` and decision record
   0066.
+- **exp-e2e-frames** (4w44h9jckz-boop/exp-e2e-frames, branch
+  `claude/zealous-turing-aputwd` at `47f5496`, read 2026-11-04):
+  `exp-e2e-frames/experiments/19-x14-hash-based-stealth-addresses-under-8288/prover/src/main.rs`,
+  the prover's usage lines and its `aggregate` and `verify-aggregate` modes
+  over leanVM at `3cbac04`, the claims each reads, what each prints, and a
+  refusal as `{"error": ...}` with exit status 2; the same experiment's
+  README, Amendment 3, for leanVM's recursion over its own bytecode only.
+  Used for `05-aggregation.md` AG-11 and decision record 0083. The prover
+  was read, not built or run here.
 - **exp-frames** (branch `exp/42-noir-transfer` at `32586cc`, read
   2026-10-21): `exp-frames/experiments/42-noir-transfer/README.md`, a private transfer on
   Aztec's note and nullifier model, proved in Noir and checked in a `VERIFY`
