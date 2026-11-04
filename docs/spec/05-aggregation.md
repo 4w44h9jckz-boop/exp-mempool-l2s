@@ -349,7 +349,9 @@ printing one JSON line:
   STARK's bytes and `claims` a file holding a JSON list of objects with
   `publicKey` and `message`; the prover prints `{"verified": true}`.
 
-A refusal is a line `{"error": ...}` and exit status 2. Under `prover`:
+A refusal is a line `{"error": ...}` and exit status 2. The prover reads hex
+with or without `0x`, and a node passes each witness on as it received it.
+Under `prover`:
 
 1. a leanSPHINCS triple's `vk_hash` is its 32-byte public key and its
    `data_hash` its 32-byte message, each written as `0x` and 64
@@ -392,6 +394,12 @@ BYTECODE". *Interpretation*, decision record 0083:
   for one signature; its `aggregate` refuses a signature that does not open
   at its message, so a witness the node took wrongly costs it that
   interval's aggregate.
+- **One process per call is too slow to fold every interval.** Started
+  afresh for each fold, the prover took 2.7 to 3.4 s for an aggregate of
+  two or three signatures, at about 413 to 417 MB at peak
+  (`exp-e2e-frames` experiment 22, `992094b`), over AG-7's 1,000 ms. A node
+  that folds every interval needs its prover resident, which this contract,
+  one process for each call, does not give.
 
 ## Not modelled
 

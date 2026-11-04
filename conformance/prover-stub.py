@@ -7,6 +7,8 @@ It keeps the prover's contract and not its cryptography (decision record 0083):
     prover-stub.py verify-aggregate <proof.bin> <claims.json>
     prover-stub.py sphincs <seed hex> <message hex>   (a key and a signature, as the prover's own mode makes them)
 
+Like the prover, it reads hex with or without 0x, and `sphincs` prints its key and signature as bare hex.
+
 Each prints one JSON line; a refusal is `{"error": ...}` and exit status 2. A claim's `publicKey` and `message` are
 32 bytes of hex. Its stand-in signature is SHA-256 over b"stub-leanSPHINCS", the key and the message; the stand-in
 aggregate is b"stub-aggregate" followed by SHA-256 over the sorted, deduplicated keys and messages, each key
@@ -82,7 +84,7 @@ def main() -> None:
         seed, message = raw({"seed": args[1]}, "seed", 32), raw({"message": args[2]}, "message", 32)
         key = hashlib.sha256(b"stub-key" + seed).digest()
         sig = signature(key, message)
-        print(json.dumps({"publicKey": "0x" + key.hex(), "signature": "0x" + sig.hex(), "signatureBytes": len(sig),
+        print(json.dumps({"publicKey": key.hex(), "signature": sig.hex(), "signatureBytes": len(sig),
                           "verified": True}))
     else:
         print("usage: prover-stub.py aggregate <claims.json> <out.bin> | verify-aggregate <proof.bin> <claims.json>",

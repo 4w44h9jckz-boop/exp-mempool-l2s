@@ -72,3 +72,13 @@ prover, so it is tested against a stub of the same contract.
   recurses over other programs.
 - **The vectors judge the contract, not the cryptography.** A real prover's
   own answers are its tests, run where it can be built.
+- **The stub has to mirror the prover's output forms, not only its
+  checks.** The first run on the real binary stopped because its `sphincs`
+  mode prints bare hex and the stub printed `0x`, so no real key was of
+  item 1's form (`exp-e2e-frames` experiment 22, `992094b`). The stub now
+  prints bare hex there too, and AG-11 says the prover reads either form,
+  while a triple's key and message keep item 1's `0x`.
+- **A node keeps its prover resident to fold every interval.** Started for
+  each fold, it took 2.7 to 3.4 s, over the 1,000 ms interval. The contract
+  is one process for each call, so a resident prover is a different
+  contract, not yet specified.

@@ -774,6 +774,15 @@ says is checked against the primary source before it is relied on.
   README, Amendment 3, for leanVM's recursion over its own bytecode only.
   Used for `05-aggregation.md` AG-11 and decision record 0083. The prover
   was read, not built or run here.
+- **exp-e2e-frames** (branch `claude/zealous-turing-aputwd` at `992094b`,
+  read 2026-11-04):
+  `exp-e2e-frames/experiments/22-q1-leansphincs-senders/results/1-wrappers-real-prover.txt`,
+  skandha's two-node exchange run on experiment 19's prover built natively:
+  seven folds of two or three leanSPHINCS signatures, 268,409 to 274,905
+  proof bytes, 2,746.8 to 3,399.2 ms each with the prover started afresh,
+  412,516,352 to 417,406,976 bytes at peak; and that the prover's `sphincs`
+  mode prints bare hex while the stub printed `0x`. Used for AG-11's
+  sentence on a resident prover and on hex.
 - **exp-frames** (branch `exp/42-noir-transfer` at `32586cc`, read
   2026-10-21): `exp-frames/experiments/42-noir-transfer/README.md`, a private transfer on
   Aztec's note and nullifier model, proved in Noir and checked in a `VERIFY`
