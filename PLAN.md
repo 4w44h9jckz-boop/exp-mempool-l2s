@@ -286,6 +286,19 @@ they added; their experiments are not part of this repository.
     word, version 8 lets the holder of a bound ticket re-price at each
     bump, within the ticket's price (CG-6, decision record 0080), at
     `43dbc1f`, in #9.
+56. **A relaxed alternative mempool behind the canonical rules.** A
+    fourth descriptor that admits what the canonical rules refuse to a
+    contract that sends or pays for its own transactions, write-once reads
+    declared per code, several pending per declared contract and the
+    payer's count lifted, with reputation per declared code from each
+    block's access list, groups for builders and three tiers. Does one write
+    that breaks no declaration still invalidate at most one transaction only
+    the relaxations admitted, and can a relay that checks no proof carry
+    them? *Done on the session branch, 2026-11-04:*
+    `15-relaxed-mempool.md` version 1, `relaxed.json` and its vectors
+    (decision records 0081 and 0082), with experiment 27, at `bc8687a`;
+    skandha plays the vectors at `7e23a41`, and its node refuses the
+    descriptor at start, since the client returns no reads.
 
 44. **An ERC-8421 profile.** Read from ERC-8421: stake and reputation for
     paymasters and other operators, and what a fresh sender is asked for.
