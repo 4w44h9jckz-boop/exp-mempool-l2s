@@ -81,7 +81,7 @@ gives the canonical paymaster a delayed withdrawal, $w(P)$, instead.
 5. **The relaxations alone stay measurable.** `sender_bound` and
    `outflow_bound` are parameters of `RM-4` and `RM-5`, both true in
    `relaxed.json`. Set false, they give the relaxations as stated. Experiment
-   27 measures both.
+   27 (`experiments/27-relaxed-tiers/README.md`) measures both.
 
 ## Consequences
 
@@ -96,4 +96,7 @@ gives the canonical paymaster a delayed withdrawal, $w(P)$, instead.
   as relaxation 3's bound, and `disjoint-keys` alone as relaxation 2. This
   record adds the declared contract and the reserve, and says why with the
   ask's own falsifier. Whether to keep them is the owner's choice. Without
-  them the claim's bound does not hold, and experiment 27 shows by how much.
+  them the claim's bound does not hold, and experiment 27 shows by how much:
+  in its stream, one payment out of a payer that declares nothing removes
+  19 relaxed transactions, and one delegation of an account with no code
+  removes 9 (`experiments/27-relaxed-tiers/results.md`, section 1).

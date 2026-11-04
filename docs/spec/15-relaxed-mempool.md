@@ -365,9 +365,10 @@ Each write also removes at most what the canonical rules let it, beside the
 relaxed one. Without `sender_bound` or `outflow_bound`, one write to a
 sender's or payer's balance, code or storage removes every relaxed
 transaction that depends on it. **Source:** RM-3 to RM-6, and FP-15.
-*Interpretation*, decision record 0082. Experiment 27 measures this bound,
-with each tier's needs, under the canonical rules, under `relaxed.json`, and
-with every node verifying.
+*Interpretation*, decision record 0082. Experiment 27
+(`experiments/27-relaxed-tiers/README.md`) measures this bound, with each
+tier's needs, under the canonical rules, under `relaxed.json`, and with
+every node verifying.
 
 ## Not modelled
 

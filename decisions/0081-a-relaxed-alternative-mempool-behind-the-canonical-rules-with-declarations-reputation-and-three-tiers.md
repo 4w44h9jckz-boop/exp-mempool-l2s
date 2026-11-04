@@ -133,6 +133,7 @@ by `web3_clientVersion` on 2026-11-04. At that commit:
   relaxed pending transaction, except a write that breaks a declaration,
   which invalidates every transaction that read the slot once, before
   reputation acts. That bound also needs decision record 0082, for
-  relaxations 2 and 3. Experiment 27 measures it.
+  relaxations 2 and 3. Experiment 27
+  (`experiments/27-relaxed-tiers/README.md`) measures it.
 - **A node needs a client that returns reads** before it can run this
   descriptor against a chain.
