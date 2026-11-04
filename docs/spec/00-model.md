@@ -1,6 +1,6 @@
 # 00. The model: accounts, heads, transactions, the pool interface, fees
 
-Version 12, 2026-10-21. Version 1 left the EIP-8250 nonce fields out of
+Version 13, 2026-11-04. Version 1 left the EIP-8250 nonce fields out of
 FEE-4 and had no `finalize` operation, version 2 had no dependency frames,
 version 3 had no sealed transactions, version 4 gave an authorization no
 nonce of its own, version 5 gave a frame transaction no admission claim,
@@ -8,8 +8,9 @@ version 6 did not say how much of a transaction's gas is state gas, and
 version 7 had no transaction that takes value from accounts that signed for
 it, version 8 priced every calldata byte as non-zero and had no client
 verdict, version 9 had no stake and no storage association, and version 10
-put every dependency frame at mode 3, and version 11 gave a claim no
-binder; see the version notes at the end.
+put every dependency frame at mode 3, version 11 gave a claim no binder,
+and version 12 gave `reset` no block access list; see the version notes at
+the end.
 
 Every other document in this directory talks about the objects defined here.
 The model keeps exactly the fields a transaction pool reads and drops the rest:
@@ -179,6 +180,15 @@ operations and no other inputs:
   and storage of `state`. `verdicts`, empty by default, maps the hash of a
   pending transaction that carries a `verdict` (MD-6) to the client's answer
   at `head`; a transaction it does not name keeps the verdict it has.
+  `access_lists`, empty by default, lists the block access lists of the
+  blocks the reset brings, oldest first. Each is EIP-7928's: for each
+  account, its storage changes, each slot with a list of block access
+  indices and the slot's value after each, and its balance changes, each a
+  block access index with the balance after it. Only
+  `15-relaxed-mempool.md` (RM-6) reads them. **Source:** EIP-7928 at
+  `258836f9` (Last Call), "RLP Data Structures"; the model keeps its
+  `storage_changes` and `balance_changes` and leaves out the reads, nonces
+  and code.
 - `tick(now)` lets time pass, for the rules that depend on it.
 - `finalize(blocks, now)` tells the pool that `blocks` became final. Each
   block is given as its `number` and, for each sender, the summed `gas_used`
@@ -192,7 +202,7 @@ from sender to that sender's transactions in nonce order; `status(hash)`, one
 of `pending`, `queued` or `unknown`; and the ordered list of transactions it
 offers a builder (BB-1). Vectors check only these, the re-simulations of
 FP-15, and the observables a later document adds for its own rules
-(`04-matcha.md`, MA-12).
+(`04-matcha.md`, MA-12; `15-relaxed-mempool.md`, RM-6 and RM-7).
 
 **MD-10. Ties.** Where a clause orders transactions and the source leaves a tie
 unresolved, the transaction the pool received later MUST sort first among
@@ -374,3 +384,8 @@ transaction that pays it says so in its frame's `state_gas` and its
   transaction (`10-claim-gated-admission.md` version 6, CG-12). Their
   defaults, no binder and `bound` true, leave a claim's hash (MD-7) as it
   was, so every vector of this document holds and now says version 12.
+- **Version 13.** MD-8's `reset` takes `access_lists`, the blocks'
+  EIP-7928 access lists, which only `15-relaxed-mempool.md` reads, and MD-9
+  names that document's observables. A reset without access lists is
+  version 12's, so every vector of this document holds and now says
+  version 13 (decision record 0081).

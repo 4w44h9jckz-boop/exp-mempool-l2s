@@ -62,6 +62,21 @@ says is checked against the primary source before it is relied on.
   and `SIGPARAM` (which halts on an `ARBITRARY` entry's resolved signer).
   Used for decision record 0069 and
   `conformance/vectors/claim-gated/cg-12-binder-entries.json`.
+- **EIP-7928, Block-Level Access Lists**, Last Call, ethereum/EIPs at
+  `258836f9`, read 2026-11-04: "RLP Data Structures" (`storage_changes`, slot
+  to block access index to new value; `balance_changes`, block access index
+  to post-balance), "BlockAccessIndex Assignment" and "Recording Semantics
+  by Change Type" (a write is "any value change" and "zeroing a slot"; each
+  write is compared against the value immediately before its index). Used
+  for MD-8's `access_lists` (`00-model.md` version 13) and RM-6 of
+  `docs/spec/15-relaxed-mempool.md`.
+- **ERC-7562, Account Abstraction Validation Scope Rules**, Review,
+  ethereum/ERCs at `493ba8a` (the head of pull request 2028), read
+  2026-11-04: "Alternative Mempools" (ALT-010 to ALT-040: alternative rules
+  "MUST be checked only when a canonical rule is violated", and `opsSeen`
+  and `opsIncluded` kept per alternative mempool) and "Alt-mempool
+  Reputation" (AREP-010, AREP-020). Used for RM-2 and RM-6 of
+  `docs/spec/15-relaxed-mempool.md` and decision record 0081.
 - **EIP-8250, Keyed Nonces for Frame Transactions**, Draft, same commit, read
   2026-10-07. Sections: Mempool, Rationale. Used for FP-7 and FP-12. Read
   again the same day for experiment 02: Constants
@@ -575,6 +590,15 @@ says is checked against the primary source before it is relied on.
   the violation, "validation prefix frame reverted", "validation prefix did
   not establish a payer") and `crates/blockchain/blockchain.rs`
   (`prospective_header`). Used for SF-4 and SF-8.
+  Read again at the same commit on 2026-11-04, when `web3_clientVersion`
+  still named it (`ethrex/v23.0.0-hegota-testnet-hotfix-64b8fc09...`):
+  `crates/networking/rpc/ethrex.rs` (`SimulateFrameTransactionResult`:
+  `valid`, `prefixShape`, `payer`, `maxCost`, `violation`, `gasUsed`,
+  `frames`, `executionStatus`, `executionError`, and no reads) and
+  `crates/vm/levm/src/vm.rs` (a storage read outside the sender records
+  `FrameSimViolation::StorageReadNonSender`). Used for decision record 0081,
+  which finds that a node run against this client cannot learn a prefix's
+  reads.
   Read again the same day for item 46: `crates/blockchain/focil_eligibility.rs`
   (`MAX_VERIFY_GAS_PER_IL`, `MAX_VERIFY_GAS_PER_TX`, `fill_il_budget`,
   `is_profile_2_candidate`), `crates/blockchain/inclusion_list_validator.rs`

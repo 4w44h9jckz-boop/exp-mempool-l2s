@@ -430,7 +430,7 @@ class StandardPool(FramePool):
 
     # --- revalidation (AM-14) -------------------------------------------------
 
-    def _simulate(self, tx: FrameTx, prefix: Prefix, head: Head, state: State) -> Simulation:
+    def _simulate(self, tx: FrameTx, prefix: Prefix, head: Head, state: State, relax: bool = False) -> Simulation:
         return validate(tx, prefix, head, state, self.config, self.config.expiry_margin)
 
     def _invalidated(self, tx_hash: str, err: TxError) -> None:
@@ -451,11 +451,12 @@ class StandardPool(FramePool):
                 self._bump(a, included=+1)
         super()._remove(tx_hash, reason, release, account)
 
-    def reset(self, head: Head, state: State, now: float = 0, verdicts: dict[str, str] | None = None) -> None:
+    def reset(self, head: Head, state: State, now: float = 0, verdicts: dict[str, str] | None = None,
+              access_lists: list | None = None) -> None:
         """FP-15 with AM-14's dependencies and blame, then REPUTATION-010's removal of what refers to a banned
         entity, then LIFECYCLE-010's of what has a gap."""
         senders = {h: e.tx.sender for h, e in self.entries.items()}
-        super().reset(head, state, now, verdicts)
+        super().reset(head, state, now, verdicts, access_lists)
         for h, e in list(self.entries.items()):
             ent = e.sim.entities
             if any(self.state_of(a) == BANNED_STATE for a in ent.addresses

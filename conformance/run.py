@@ -315,7 +315,11 @@ def run_pool(case: dict) -> None:
             write_roots(state, frame_cfg, step["reset"].get("roots"))
             by_label = {label(tx): tx.hash for txs in pool.frame.content().values() for tx in txs}
             verdicts = {by_label[k]: v for k, v in step["reset"].get("verdicts", {}).items()}  # MD-8
-            pool.reset(head, state, now, verdicts)
+            lists = [{addr: {"storage_changes": {int(slot): [tuple(w) for w in writes]
+                                                 for slot, writes in a.get("storage_changes", {}).items()},
+                             "balance_changes": [tuple(b) for b in a.get("balance_changes", [])]}
+                      for addr, a in block.items()} for block in step["reset"].get("access_lists", [])]  # MD-8
+            pool.reset(head, state, now, verdicts, lists)
         elif "tick" in step:
             now = step["tick"]
             pool.tick(now)
@@ -326,6 +330,14 @@ def run_pool(case: dict) -> None:
         elif "finalize" in step:
             now = step.get("now", now)
             pool.finalize([(b["number"], dict(b.get("gas", {}))) for b in step["finalize"]], now)
+        elif "expect_declarations" in step:  # RM-6
+            got = {code: pool.frame.declaration_status(code) for code in step["expect_declarations"]}
+            if got != step["expect_declarations"]:
+                raise Mismatch(f"{where}: declarations expected {step['expect_declarations']}, got {got}")
+        elif "expect_groups" in step:  # RM-7
+            got = [[label(tx) for tx in group] for group in pool.frame.groups()]
+            if got != step["expect_groups"]:
+                raise Mismatch(f"{where}: groups expected {step['expect_groups']}, got {got}")
         elif "expect_width" in step:
             got = {s: pool.frame.width(s) for s in step["expect_width"]}
             if got != step["expect_width"]:

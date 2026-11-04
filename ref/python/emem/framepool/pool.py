@@ -1,6 +1,6 @@
 """The frame transaction pool: `docs/spec/02-frame-pool.md`, the MATCHA proposal of `04-matcha.md`, the
-recent roots of `08-recent-roots.md`, the expiring nonces of `09-expiring-nonces.md`, and the claim-gated
-admission of `10-claim-gated-admission.md`."""
+recent roots of `08-recent-roots.md`, the expiring nonces of `09-expiring-nonces.md`, the claim-gated
+admission of `10-claim-gated-admission.md`, and the relaxed alternative mempool of `15-relaxed-mempool.md`."""
 
 from __future__ import annotations
 
@@ -19,8 +19,9 @@ from ..reserver import Reserver
 from ..tx import FrameTx, replaces
 from .config import EIP_8141, FramePoolConfig
 from .matcha import admission_gas, charge
-from .prefix import (Prefix, Simulation, analyse, check_expiring, check_nonce, check_static, dep_value, expiring,
-                     seen_slot, simulate, static_payer)
+from .prefix import (EXPIRY, PAY, ROOT, Prefix, Simulation, analyse, check_expiring, check_nonce, check_static,
+                     dep_value, expiring, seen_slot, simulate, static_payer)
+from .relaxed import BANNED, RELAXABLE, declaration, declares, state_of
 
 ACTIVE, THROTTLED, BANNED_STATE = "ACTIVE", "THROTTLED", "BANNED"  # AM-13's states
 
@@ -42,6 +43,9 @@ class Entry:
     charge: int = 0  # MA-2, kept for the re-runs of MA-9
     reads: frozenset[str] = frozenset()  # the addresses it is indexed under (FP-15)
     cls: frozenset = frozenset()  # MA-14, fixed at admission
+    relaxed: frozenset = frozenset()  # RM-2: the relaxations that admitted it, of `reads`, `sender` and `payer`
+    declared: tuple = ()  # RM-3: the declared slots it reads, as (address, slot)
+    relies: frozenset = frozenset()  # RM-6: the declared codes it relies on
 
 
 class FramePool:
@@ -85,7 +89,17 @@ class FramePool:
         self.counters: dict[str, list[int]] = {}  # by address, [seen, included]
         self.refreshed = 0  # how many refreshes the pool's time has passed
         self._counted: set[str] = set()  # CG-11: the transactions counted in a ticket paymaster's `seen`
-
+        # 15-relaxed-mempool.md, under `relaxed`
+        self._canon = config.with_(relaxed=False, dependency_frames=False, claims=False, bond=False, binding=False)
+        self._full = config  # the descriptor's whole configuration, while RM-2's first judgement runs canonically
+        self.slot_readers: dict[tuple, set[str]] = {}  # RM-3: by declared slot, the pending transactions reading it
+        self.violations: dict[str, int] = {}  # RM-6: by declared code
+        self.declarations_refreshed = 0  # RM-6: how many refreshes the pool's time has passed
+        self.forwarded: set = set()  # RM-8: the claims a relay has forwarded
+        self._relaxing = False  # RM-2: the second judgement is running
+        self._marks: set[str] = set()  # RM-2: the relaxations the running judgement has used
+        self._relies: set[str] = set()  # RM-6: the declared codes it has relied on
+        self._sim: Simulation | None = None  # the running judgement's simulation, for RM-4
     # --- the pool interface (MD-8) --------------------------------------------
 
     def add(self, txs: list[FrameTx], now: float = 0) -> list[str]:
@@ -95,8 +109,10 @@ class FramePool:
             results.append(self._add_one(tx, now))
         return results
 
-    def reset(self, head: Head, state: State, now: float = 0, verdicts: dict[str, str] | None = None) -> None:
-        """FP-15, with MA-8 to MA-10 under `matcha`.
+    def reset(self, head: Head, state: State, now: float = 0, verdicts: dict[str, str] | None = None,
+              access_lists: list | None = None) -> None:
+        """FP-15, with MA-8 to MA-10 under `matcha`, and RM-6's reading of the blocks' access lists under
+        `relaxed`.
 
         Only a transaction indexed under an address the new state may have
         changed can fail step 1, 3 or 4, so only those are looked at, in the
@@ -104,6 +120,8 @@ class FramePool:
         this set" is the same idea.
         """
         self._expire(now)
+        if self.config.relaxed and access_lists:
+            self._violations(access_lists)
         touched = state.changed_since(self.state)
         self.head, self.state = head, state
         self.resimulated = []
@@ -162,7 +180,7 @@ class FramePool:
             self.resimulations += 1
             self.work[e.tx.sender] += admission_gas(e.tx, e.prefix)
             try:
-                sim = self._simulate(e.tx, e.prefix, head, state)
+                sim = self._simulate(e.tx, e.prefix, head, state, relax=bool(e.relaxed))
             except TxError as err:
                 self._invalidated(h, err)
                 continue
@@ -184,7 +202,7 @@ class FramePool:
         for h in again:
             e = self.entries[h]
             try:
-                self._check_payer(e.tx, e.sim.payer, e.sim.payer_class, None)
+                self._check_payer(e.tx, e.sim.payer, e.sim.payer_class, None, lifted="payer" in e.relaxed)
             except TxError as err:
                 self._remove(h, "payer:" + err.code, account=False)
                 continue
@@ -284,13 +302,16 @@ class FramePool:
 
     def precheck(self, tx: FrameTx) -> None:
         """CG-3 step 2 for one transaction: FP-2 to FP-10 with CG-2, CG-4 and CG-6, without AG-6, then CG-5.
-        Raises the first failure and changes nothing but the work counted."""
+        Raises the first failure and changes nothing but the work counted. A relay of RM-8 runs no prefix."""
         if tx.hash in self.entries:  # FP-2
             raise TxError(E.ErrAlreadyKnown)
         prefix = check_static(tx, self.head, self.config)  # FP-3 to FP-6, AG-2 to AG-4
         self._check_claim(tx)
         self.work[tx.sender] += admission_gas(tx, prefix)
-        self._simulate(tx, prefix, self.head, self.state)  # FP-7 to FP-10
+        if self.config.relaxed and self.config.tier == "relay":
+            check_nonce(tx, self.state)  # FP-7, the relay's state
+        else:
+            self._simulate(tx, prefix, self.head, self.state, relax=self.config.relaxed)  # FP-7 to FP-10
         if tx.claim is not None and tx.claim in self.used_claims:  # CG-5
             raise TxError(E.ErrClaimUsed)
 
@@ -404,6 +425,28 @@ class FramePool:
     # --- admission ------------------------------------------------------------
 
     def _add_one(self, tx: FrameTx, now: float = 0) -> str:
+        """RM-2 under `relaxed`: the canonical modules first, and the whole descriptor only for a transaction they
+        refuse with a code a relaxation answers, or one with a dependency; RM-8's relay apart."""
+        if not self.config.relaxed:
+            return self._admit(tx, now)
+        if self.config.tier == "relay":
+            return self._relay(tx, now)
+        if not any(f.mode == self.config.dep_frame_mode for f in tx.frames):
+            self.config = self._canon
+            try:
+                code = self._admit(tx, now)
+            finally:
+                self.config = self._full
+            if code not in RELAXABLE:
+                return code
+        self._relaxing = True
+        try:
+            return self._admit(tx, now)
+        finally:
+            self._relaxing = False
+
+    def _admit(self, tx: FrameTx, now: float = 0) -> str:
+        self._marks, self._relies, self._sim = set(), set(), None
         try:
             if tx.hash in self.entries:  # FP-2
                 raise TxError(E.ErrAlreadyKnown)
@@ -413,7 +456,8 @@ class FramePool:
             if self.config.dependency_frames and not all(d in self.proven or d in self.relayed
                                                           for d in dependencies(tx, self.config)):  # AG-6, CG-7 step 3
                 raise TxError(E.ErrFrameDepsUnproven)
-            self.work[tx.sender] += admission_gas(tx, prefix)
+            if not self._relaxing:  # RM-2's second judgement runs no prefix that was not counted
+                self.work[tx.sender] += admission_gas(tx, prefix)
             old_hash = None if self._many(tx) else self.by_identity.get((tx.sender, tx.nonce_keys, tx.nonce_seq))
             old = self.entries[old_hash] if old_hash is not None else None
             early = self.config.static_first and not self.matcha
@@ -424,7 +468,8 @@ class FramePool:
                     check_nonce(tx, self.state)
                 self._check_payer(tx, *static_payer(tx, prefix, self.state, self.config), old)
                 self._check_identity(tx, old)
-            sim = self._simulate(tx, prefix, self.head, self.state)  # FP-7 to FP-10
+            sim = self._simulate(tx, prefix, self.head, self.state, relax=self._relaxing)  # FP-7 to FP-10
+            self._sim = sim
             if not early:
                 self._check_payer(tx, sim.payer, sim.payer_class, old)  # FP-11
             tx_charge = charge(tx, prefix, self.config.safety_factor) if self.matcha else 0
@@ -443,6 +488,9 @@ class FramePool:
                     self._check_additional(tx, sim, tx_charge)
             elif not early:
                 self._check_sender(tx)
+            declared = self._declared(tx, sim)
+            if self._relaxing:  # RM-3's unset slots, then RM-6
+                self._check_relaxed(tx, sim, declared, old_hash)
             if self.reserver.held_by_other(tx.sender, self):  # FP-13
                 raise TxError(E.ErrAlreadyReserved)
             seq = self._sequence()
@@ -459,19 +507,22 @@ class FramePool:
                     self.bases.add(tx.hash)
                 else:
                     self.widths[tx.sender] -= tx_charge
-            self._insert(Entry(tx, seq, prefix, sim, now, tx_charge, cls=cls))
+            self._insert(Entry(tx, seq, prefix, sim, now, tx_charge, cls=cls, relaxed=frozenset(self._marks),
+                               declared=declared, relies=frozenset(self._relies)))
             return E.OK
         except TxError as err:
             return err.code
 
-    def _simulate(self, tx: FrameTx, prefix: Prefix, head: Head, state: State) -> Simulation:
+    def _simulate(self, tx: FrameTx, prefix: Prefix, head: Head, state: State, relax: bool = False) -> Simulation:
         """FP-7 to FP-10 as a pool runs them: with its `expiry_margin`, and its head's slot plus one and its
-        `root_margin` (RR-2, RR-5)."""
+        `root_margin` (RR-2, RR-5); with `relax`, RM-3's declared reads."""
         cfg = self.config
-        return simulate(tx, prefix, head, state, cfg, cfg.expiry_margin, head.slot + 1, cfg.root_margin)
+        return simulate(tx, prefix, head, state, cfg, cfg.expiry_margin, head.slot + 1, cfg.root_margin, relax)
 
-    def _check_payer(self, tx: FrameTx, payer: str, payer_class: str, old: Entry | None) -> None:
-        """FP-11."""
+    def _check_payer(self, tx: FrameTx, payer: str, payer_class: str, old: Entry | None,
+                     lifted: bool = False) -> None:
+        """FP-11, with RM-5 in the second judgement of RM-2; `lifted` for a transaction RM-5 admitted, which FP-15
+        step 4 counts again without the count."""
         cfg = self.config
         reserved = self.reserved.get(payer, 0)
         count = self.payer_count.get(payer, 0)
@@ -482,7 +533,10 @@ class FramePool:
         if self.state.balance(payer) - reserved - withdrawal < tx.max_cost:
             raise TxError(E.ErrFramePayerExposure)
         capped = payer_class == "noncanonical" or (payer_class == "default" and cfg.cap_codeless_payers)
-        if capped and count >= cfg.max_pending_noncanonical:
+        if capped and count >= cfg.max_pending_noncanonical and not lifted:
+            if self._relaxing and self._rm5(tx, payer):  # RM-5
+                self._marks.add("payer")
+                return
             raise TxError(E.ErrFramePaymasterBusy)
 
     def _check_identity(self, tx: FrameTx, old: Entry | None) -> None:
@@ -501,6 +555,9 @@ class FramePool:
         if self.config.expiring and self.config.expiring_per_sender == "many":
             pending -= self.keys.get(tx.sender, {}).get(self.config.expiring_key, 0)
         if pending and not (self.config.per_sender == "disjoint-keys" and self._disjoint(tx)):
+            if self._relaxing and self._rm4(tx):  # RM-4
+                self._marks.add("sender")
+                return
             raise TxError(E.ErrFrameSenderBusy)
 
     def _many(self, tx: FrameTx) -> bool:
@@ -560,8 +617,10 @@ class FramePool:
             raise TxError(E.ErrFrameLoadUnderpriced)
 
     def _expire(self, now: float) -> None:
-        """AM-13's refresh, then MA-8, oldest first."""
+        """AM-13's refresh and RM-6's, then MA-8, oldest first."""
         self._refresh(now)
+        if self._full.relaxed:
+            self._refresh_declarations(now)
         if not self.matcha:
             return
         ages = self._ages
@@ -597,6 +656,192 @@ class FramePool:
             return heap[0][1]
         return None
 
+    # --- 15-relaxed-mempool.md ------------------------------------------------
+
+    def _declared(self, tx: FrameTx, sim: Simulation) -> tuple:
+        """RM-3: the declared slots a prefix reads, its sender's included, as (address, slot), in a fixed order."""
+        cfg = self._full
+        if not cfg.relaxed:
+            return ()
+        return tuple(sorted((k[1], k[2]) for k in sim.deps
+                            if k[0] == "storage" and declares(cfg, self.state.code(k[1]), k[2])))
+
+    def _check_relaxed(self, tx: FrameTx, sim: Simulation, declared: tuple, old_hash: str | None) -> None:
+        """RM-3's unset slots, then RM-6, for a transaction RM-2's second judgement admits."""
+        cfg = self._full
+        if any(a != tx.sender for a, _ in declared):
+            self._marks.add("reads")
+        for a, slot in declared:
+            if a != tx.sender or "sender" in self._marks:
+                self._relies.add(self.state.code(a))
+            if self.state.storage(a, slot) == 0 and self.slot_readers.get((a, slot), set()) - {old_hash}:
+                raise TxError(E.ErrWriteOnceBusy)
+        for code in sorted(self._relies):
+            state = state_of(self.violations.get(code, 0), cfg)
+            if state == BANNED:
+                raise TxError(E.ErrDeclarationBanned)
+            if state != "ACTIVE" and sum(1 for h, e in self.entries.items()
+                                         if code in e.relies and h != old_hash) >= cfg.throttled_count:
+                raise TxError(E.ErrDeclarationThrottled)
+
+    def _rm4(self, tx: FrameTx) -> bool:
+        """RM-4: items 1 to 3, for a transaction FP-12 refuses under `one`."""
+        cfg, sim = self._full, self._sim
+        if not self._disjoint(tx):
+            return False
+        if cfg.sender_bound:
+            code = self.state.code(tx.sender)
+            if declaration(cfg, code) is None:
+                return False
+            if any(k[0] == "storage" and k[1] == tx.sender and not declares(cfg, code, k[2]) for k in sim.deps):
+                return False
+            self._relies.add(code)
+        if cfg.outflow_bound and sim.payer_class != "canonical":
+            return self._reserve(tx, sim.payer)
+        return True
+
+    def _rm5(self, tx: FrameTx, payer: str) -> bool:
+        """RM-5: the count lifted, under `outflow_bound` for a payer that passes the reserve."""
+        return not self._full.outflow_bound or self._reserve(tx, payer)
+
+    def _reserve(self, tx: FrameTx, payer: str) -> bool:
+        """RM-5's reserve: a declared payer with a bound X, and a max_cost of at least X."""
+        code = self.state.code(payer)
+        d = declaration(self._full, code)
+        if d is None or d[2] is None:
+            return False
+        if tx.max_cost < d[2]:
+            raise TxError(E.ErrRelaxedReserve)
+        self._relies.add(code)
+        return True
+
+    def _violations(self, access_lists: list) -> None:
+        """RM-6: each block's access list, read against the old head's codes and values, oldest block first."""
+        cfg, state = self._full, self.state
+        storage: dict[tuple, int] = {}
+        balance: dict[str, int] = {}
+        for block in access_lists:
+            for addr, changes in block.items():
+                code = state.code(addr)
+                d = declaration(cfg, code)
+                if d is None:
+                    continue
+                for slot, writes in changes.get("storage_changes", {}).items():
+                    for _, post in sorted(writes):
+                        pre = storage.get((addr, slot), state.storage(addr, slot))
+                        if pre != 0 and declares(cfg, code, slot):
+                            self.violations[code] = self.violations.get(code, 0) + 1
+                        storage[(addr, slot)] = post
+                for _, post in sorted(changes.get("balance_changes", [])):
+                    pre = balance.get(addr, state.balance(addr))
+                    if d[2] is not None and pre - post > d[2]:
+                        self.violations[code] = self.violations.get(code, 0) + 1
+                    balance[addr] = post
+
+    def _refresh_declarations(self, now: float) -> None:
+        """RM-6: violations decay every `declaration_refresh_seconds` of the pool's time, counted from 0."""
+        due = int(now // self._full.declaration_refresh_seconds)
+        while self.declarations_refreshed < due:
+            for code in list(self.violations):
+                self.violations[code] = self.violations[code] * 23 // 24
+            self.declarations_refreshed += 1
+
+    def declaration_status(self, code: str) -> dict:
+        """RM-6: a declared code's count of violations and its state (MD-9)."""
+        v = self.violations.get(code, 0)
+        return {"violations": v, "state": state_of(v, self._full)}
+
+    def groups(self) -> list[list[FrameTx]]:
+        """RM-7: the pending transactions joined by shared keys, listed by their earliest received."""
+        order = sorted(self.entries.values(), key=lambda e: e.seq)
+        parent = {e.tx.hash: e.tx.hash for e in order}
+
+        def find(h: str) -> str:
+            while parent[h] != h:
+                parent[h] = parent[parent[h]]
+                h = parent[h]
+            return h
+
+        owner: dict[tuple, str] = {}
+        for e in order:
+            keys = [("nonce", e.tx.sender, k) for k in e.tx.nonce_keys] + [("payer", e.sim.payer)] + \
+                   [("slot", a, slot) for a, slot in e.declared]
+            for key in keys:
+                if key in owner:
+                    a, b = find(owner[key]), find(e.tx.hash)
+                    if a != b:
+                        first, second = sorted((a, b), key=lambda h: self.entries[h].seq)
+                        parent[second] = first
+                else:
+                    owner[key] = e.tx.hash
+        groups: dict[str, list[FrameTx]] = {}
+        for e in order:
+            groups.setdefault(find(e.tx.hash), []).append(e.tx)
+        return list(groups.values())
+
+    def _protocol_defined(self, tx: FrameTx, prefix: Prefix) -> bool:
+        """RM-8 item 1: every prefix frame is one the EIP evaluates directly."""
+        for frame, kind in zip(prefix.frames, prefix.kinds):
+            if kind in (ROOT, EXPIRY):
+                continue
+            target = frame.target if frame.target is not None else tx.sender
+            code = self.state.code(target)
+            if code == "" or (kind == PAY and code == self.config.canonical_paymaster_code):
+                continue
+            return False
+        return True
+
+    def _relay(self, tx: FrameTx, now: float = 0) -> str:
+        """RM-8: a relay's admission. It runs no prefix and checks no proof."""
+        cfg = self.config
+        try:
+            if tx.hash in self.entries:  # FP-2
+                raise TxError(E.ErrAlreadyKnown)
+            prefix = check_static(tx, self.head, cfg)  # FP-3 to FP-6, AG-2 to AG-4
+            if cfg.dependency_frames and not all(d in self.proven or d in self.relayed
+                                                  for d in dependencies(tx, cfg)):  # AG-6, CG-7 step 3
+                raise TxError(E.ErrFrameDepsUnproven)
+            old_hash = self.by_identity.get((tx.sender, tx.nonce_keys, tx.nonce_seq))
+            old = self.entries[old_hash] if old_hash is not None else None
+            if self._protocol_defined(tx, prefix):  # item 1, evaluated as FP-8 does
+                sim = self._simulate(tx, prefix, self.head, self.state)
+            elif tx.claim is not None:  # item 2: the claim, and not the prefix
+                seqs = check_nonce(tx, self.state)  # FP-7
+                self._check_claim(tx)
+                if tx.claim in self.forwarded and (old is None or old.tx.claim != tx.claim):
+                    raise TxError(E.ErrClaimUsed)
+                payer, payer_class = static_payer(tx, prefix, self.state, cfg)
+                deps = {("nonce_seq", tx.sender, k): s for k, s in zip(tx.nonce_keys, seqs)}
+                deps[("balance", payer)] = self.state.balance(payer)
+                sim = Simulation(payer, payer_class, deps, None)
+            else:
+                raise TxError(E.ErrRelayUnchecked)
+            reserved = self.reserved.get(sim.payer, 0) - (old.tx.max_cost if old and old.sim.payer == sim.payer else 0)
+            withdrawal = self.state.withdrawal(sim.payer) if sim.payer_class == "canonical" else 0
+            if self.state.balance(sim.payer) - reserved - withdrawal < tx.max_cost:  # FP-11's exposure check
+                raise TxError(E.ErrFramePayerExposure)
+            if old is not None:  # FP-12
+                if not replaces(old.tx, tx, cfg.price_bump):
+                    raise TxError(E.ErrReplaceUnderpriced)
+            elif tx.sender in self.by_sender and not self._disjoint(tx):  # RM-4 item 1
+                raise TxError(E.ErrFrameSenderBusy)
+            if self.reserver.held_by_other(tx.sender, self):  # FP-13
+                raise TxError(E.ErrAlreadyReserved)
+            seq = self._sequence()
+            if old is None and len(self.entries) >= cfg.max_pending:  # FP-14
+                victim = self._victim(tx, seq, sim.deadline)
+                if victim is None:
+                    raise TxError(E.ErrTxPoolOverflow)
+                self._remove(victim, "capacity")
+            if old_hash is not None:
+                self._remove(old_hash, "replaced", release=False, keep_claim=True)
+            self._insert(Entry(tx, seq, prefix, sim, now))
+            if tx.claim is not None:
+                self.forwarded.add(tx.claim)
+            return E.OK
+        except TxError as err:
+            return err.code
+
     # --- bookkeeping ----------------------------------------------------------
 
     def _index(self, e: Entry, sign: int) -> None:
@@ -630,6 +875,8 @@ class FramePool:
             used[k] = used.get(k, 0) + 1
         self._account(e, +1)
         self._index(e, +1)
+        for key in e.declared:  # RM-3
+            self.slot_readers.setdefault(key, set()).add(tx.hash)
         if self._evict_fee is not None:
             heapq.heappush(self._evictable, (self._evict_key(e.sim.deadline, tx, e.seq, self._evict_fee), tx.hash))
         if self.matcha:
@@ -672,8 +919,15 @@ class FramePool:
         if account:
             self._account(e, -1)
         self._index(e, -1)
+        for key in e.declared:  # RM-3
+            readers = self.slot_readers[key]
+            readers.discard(tx_hash)
+            if not readers:
+                del self.slot_readers[key]
         if reason == "stale_nonce" and tx.hash in self._counted:  # CG-11: included
             self._bump(self.ticket_paymaster(tx), included=+1)
-        if self.config.claims and tx.claim is not None and reason != "stale_nonce" and not keep_claim:  # CG-6
+        canonical = self.config.relaxed and not e.relaxed and not dependencies(tx, self.config)  # RM-2
+        if self.config.claims and tx.claim is not None and reason != "stale_nonce" and not keep_claim \
+                and not canonical:  # CG-6
             self.expired_claims[tx.claim] = max(self.expired_claims.get(tx.claim, tx.claim.epoch), tx.claim.epoch)
         self.log.append(("dropped", tx, reason))

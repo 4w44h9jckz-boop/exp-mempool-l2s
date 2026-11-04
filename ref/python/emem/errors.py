@@ -102,6 +102,13 @@ ErrRelayAggregate = "ErrRelayAggregate"
 ErrIssuerUnbonded = "ErrIssuerUnbonded"  # CG-11
 ErrClaimUnbound = "ErrClaimUnbound"  # CG-12
 
+# 15-relaxed-mempool.md
+ErrWriteOnceBusy = "ErrWriteOnceBusy"  # RM-3
+ErrRelaxedReserve = "ErrRelaxedReserve"  # RM-5
+ErrDeclarationThrottled = "ErrDeclarationThrottled"  # RM-6
+ErrDeclarationBanned = "ErrDeclarationBanned"  # RM-6
+ErrRelayUnchecked = "ErrRelayUnchecked"  # RM-8
+
 # This repository's, for ERC-8421's standard ruleset (`docs/spec/14-erc-8421.md`)
 ErrFramePreVerifyNoCode = "ErrFramePreVerifyNoCode"
 ErrFrameStrayDefault = "ErrFrameStrayDefault"

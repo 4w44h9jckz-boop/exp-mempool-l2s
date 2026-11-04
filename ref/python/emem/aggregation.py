@@ -87,7 +87,7 @@ class Aggregator:
         cfg = frame.config
         resolved = [entry if isinstance(entry, FrameTx) else
                     (frame.entries[entry].tx if entry in frame.entries else None) for entry in wrapper.txs]
-        relay = cfg.claims and not cfg.verifies  # CG-7
+        relay = cfg.claims and (not cfg.verifies or (cfg.relaxed and cfg.tier == "relay"))  # CG-7, RM-8
         try:
             if relay and wrapper.mode == 1:  # CG-7 step 1
                 raise TxError(E.ErrRelayAggregate)
@@ -178,7 +178,7 @@ class Aggregator:
         owned = {h: dependencies(e.tx, cfg) for h, e in held.items()}  # AG-4 under the profile
         received, self.received = self.received, []
         self.proving_time, self.memory, self.inputs, self.verified = 0, 0, 0, 0
-        if not held or (cfg.claims and not cfg.verifies):  # CG-7 step 5: a relay builds none
+        if not held or (cfg.claims and (not cfg.verifies or (cfg.relaxed and cfg.tier == "relay"))):  # CG-7 step 5, RM-8
             self.previous, self.previous_deps = [], ()
             return None
         listed: list[str] = []

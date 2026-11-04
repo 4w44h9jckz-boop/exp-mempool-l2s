@@ -1,10 +1,11 @@
 # 13. Descriptors: a ruleset as a file a node loads
 
-Version 4, 2026-10-21. Version 2, 2026-10-20, adds the module `CG-11`,
+Version 5, 2026-11-04. Version 2, 2026-10-20, adds the module `CG-11`,
 the bond of `10-claim-gated-admission.md` version 5; version 3 adds the
 module `CG-12`, the binding of its version 6, and the bound template to
 `CG-10`; version 4 names that template in `claim-gated.json`, as its
-version 7 does.
+version 7 does; version 5 adds the modules `RM-2` to `RM-8` of
+`15-relaxed-mempool.md` and the fourth descriptor, `relaxed.json`.
 
 **Status: proposal.** EIP-8141 fixes one public mempool's rules, and
 ERC-8421 lets nodes agree on others: "Each alternative mempool is identified
@@ -16,8 +17,10 @@ with its parameters. It has one canonical encoding and an identifier derived
 from it, it may inherit from a parent descriptor, and a node that refuses a
 transaction under it names the descriptor and the rule. The profiles of
 `02-frame-pool.md`, `05-aggregation.md` and `10-claim-gated-admission.md`
-become descriptors, and `14-erc-8421.md` writes ERC-8421's standard ruleset
-as one. Decision record 0060 has the readings.
+become descriptors, `14-erc-8421.md` writes ERC-8421's standard ruleset
+as one, and `15-relaxed-mempool.md` an alternative mempool that relaxes the
+canonical one. Decision record 0060 has the readings, and decision record
+0081 those of the fourth descriptor.
 
 ## Errors
 
@@ -136,10 +139,20 @@ the one those clauses give.
 | `CG-10` | `template_length` (integer), `template_keccak` (string), `bound_template_length` (integer, or `null` for none), `bound_template_keccak` (string, or `null` for none) | rule |
 | `CG-11` | `min_stake_value` (amount), `min_unstake_delay` (integer), `min_inclusion_rate_denominator` (integer), `throttling_slack` (integer), `ban_slack` (integer), `refresh_seconds` (integer), `throttled_entity_mempool_count` (integer) | rule |
 | `CG-12` | none | rule |
+| `RM-2` | none | rule |
+| `RM-3` | `declarations` (array of declarations, `15-relaxed-mempool.md` RM-1) | rule |
+| `RM-4` | `sender_bound` (boolean) | rule |
+| `RM-5` | `outflow_bound` (boolean) | rule |
+| `RM-6` | `ban_violations` (integer), `throttled_count` (integer), `declaration_refresh_seconds` (integer) | rule |
+| `RM-7` | none | rule |
+| `RM-8` | none | rule |
 
 A **core** module is part of every frame pool this repository models; a
 **rule** module may be absent, or replaced (DS-6). A module refuses with the
-codes its document's Errors table gives it.
+codes its document's Errors table gives it. A declaration in `RM-3`'s array
+is an object of the members RM-1 lists, each of its type; a declaration of
+another shape, or a second declaration for one code, is
+`ErrDescriptorParams`.
 
 ## Inheritance and loading
 
@@ -176,12 +189,20 @@ modules in this order, and the first failure is its answer:
    claims (decision record 0060);
 5. if any `AG` module is present, every `AG` module of the table is, and if
    any `CG` module is present, every `AG` and `CG` module is, else
-   `ErrDescriptorIncomplete` naming the first missing in the table's order. A
+   `ErrDescriptorIncomplete` naming the first missing in the table's order;
+6. if any `RM` module is present, every `AG`, `CG` and `RM` module is, else
+   `ErrDescriptorIncomplete` naming the first missing in the table's order,
+   so step 4 already keeps the `RM` modules from the ERC's; and, with the
+   `RM` modules, `FP-11` has `max_pending_noncanonical` 1 and
+   `cap_codeless_payers` false and `FP-12` has `per_sender` `one`, the
+   canonical values RM-2 judges by, else `ErrDescriptorConflict` naming the
+   module. A
 pool under a complete ruleset behaves as the profile whose parameters its
 modules carry: every module listed above present, with FP-1's `eip-8141`
 column, is the `eip-8141` profile; with the `AG` modules, `eip-8288`; with
-the `CG` modules too, `claim-gated`. A parameter of FP-1, AG-1 or CG-1 no
-module carries takes that profile's value.
+the `CG` modules too, `claim-gated`; with the `RM` modules too, `relaxed`.
+A parameter of FP-1, AG-1, CG-1 or RM-1 no module carries takes that
+profile's value.
 
 **DS-7. Rejections.** A pool that refuses a transaction under a descriptor
 MUST name, with the code, the **rule**, the effective module that refused
@@ -193,13 +214,14 @@ one module above or in `14-erc-8421.md`.
 
 ## The descriptors
 
-**DS-8. Three descriptors.** `docs/spec/descriptors/` holds:
+**DS-8. Four descriptors.** `docs/spec/descriptors/` holds:
 
 | File | Ruleset | Parent |
 | --- | --- | --- |
 | `eip-8141.json` | EIP-8141's canonical mempool: the modules above from `FP-2` to `FP-16`, with FP-1's `eip-8141` column | none |
 | `claim-gated.json` | claim-gated admission: `eip-8141.json`'s modules with the `AG` and `CG` modules above, with AG-1's and CG-1's values | `eip-8141.json` |
 | `erc-8421.json` | ERC-8421's standard alternative mempool, ERCs pull request 2028 at `493ba8a` (`14-erc-8421.md`) | `eip-8141.json` |
+| `relaxed.json` | the relaxed alternative mempool (`15-relaxed-mempool.md`): `eip-8141.json`'s modules with the `AG` and `CG` modules and `RM-2` to `RM-8`, with AG-1's, CG-1's and RM-1's values and no declarations | `eip-8141.json` |
 
 Each file's identifier is in `docs/spec/descriptors/README.md`. A change to
 a file changes its identifier, and a child's `parent` with it.
@@ -236,3 +258,10 @@ and so does this document.
   changes. The vectors of DS-1 to DS-8 hold and now say version 4, but for
   the identifier and the profile of `claim-gated.json`, which change with
   the file (decision record 0069).
+- **Version 5.** The modules `RM-2` to `RM-8` of `15-relaxed-mempool.md`,
+  DS-6's step 6, which asks for every `AG`, `CG` and `RM` module together
+  and the canonical `FP-11` and `FP-12` beside them, and the fourth
+  descriptor, `relaxed.json` (DS-8). No other descriptor changes, and
+  neither does its identifier. The vectors of DS-1 to DS-8 hold unchanged
+  and now say version 5. DS-4, DS-6 and DS-8 gain cases for the new
+  modules and the new file (decision record 0081).

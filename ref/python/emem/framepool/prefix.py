@@ -21,6 +21,7 @@ from ..tx import (APPROVE_EXECUTION, APPROVE_PAYMENT, APPROVE_SCOPE_MASK, ATOMIC
                   MAX_FRAMES, MAX_NONCE_KEYS, SENDER_MODE, SIGNATURE_GAS, TX_MAX_GAS_LIMIT, VERIFY_MODE, Frame,
                   FrameTx)
 from .config import FramePoolConfig
+from .relaxed import declares
 
 EXPIRY, DEPLOY, SELF_VERIFY, ONLY_VERIFY, PAY, OTHER = (
     "expiry_verify", "deploy", "self_verify", "only_verify", "pay", "other")
@@ -215,16 +216,17 @@ def _static(tx: FrameTx, gas_limit: int, cfg: FramePoolConfig) -> Prefix:
     return prefix
 
 
-def check_trace(frame: Frame, sender: str, deploy: bool, state: State, cfg: FramePoolConfig) -> None:
-    """FP-9, in the order the clause lists the rules."""
+def check_trace(frame: Frame, sender: str, deploy: bool, state: State, cfg: FramePoolConfig,
+                relax: bool = False) -> None:
+    """FP-9, in the order the clause lists the rules; with `relax`, RM-3's declared reads outside the sender."""
     for op in frame.opcodes:
         if op in BANNED_OPCODES and not (deploy and op in ALLOWED_IN_DEPLOY):
             _fail(E.ErrFrameBannedOpcode)
     for addr, *_ in frame.writes:
         if not (deploy and addr == sender):
             _fail(E.ErrFrameStateWrite)
-    for addr, *_ in frame.reads:
-        if addr != sender:
+    for addr, slot, *_ in frame.reads:
+        if addr != sender and not (relax and declares(cfg, state.code(addr), slot)):
             _fail(E.ErrFrameStorageReadNonSender)
     for addr in frame.calls:
         if addr == sender or addr in cfg.precompiles:
@@ -302,10 +304,11 @@ def static_payer(tx: FrameTx, prefix: Prefix, state: State, cfg: FramePoolConfig
 
 
 def simulate(tx: FrameTx, prefix: Prefix, head: Head, state: State, cfg: FramePoolConfig,
-             expiry_margin: int = 0, slot: int | None = None, root_margin: int = 0) -> Simulation:
+             expiry_margin: int = 0, slot: int | None = None, root_margin: int = 0, relax: bool = False) -> Simulation:
     """FP-7 to FP-10, with RR-5; a pool passes its `expiry_margin` (FP-8), its current slot, which is its
     head's plus one, and its `root_margin` (RR-2, RR-5); a block being built passes none, and its own slot is
-    the current one (RR-8)."""
+    the current one (RR-8). With `relax`, RM-3 allows declared reads outside the sender and records them as
+    dependencies."""
     sender = tx.sender
     mode = expiring(tx, cfg)
     if mode:  # EN-4 in place of FP-7; seen(h) is a dependency, so a pool looks again when it changes (EN-6)
@@ -343,6 +346,8 @@ def simulate(tx: FrameTx, prefix: Prefix, head: Head, state: State, cfg: FramePo
         for addr, slot, *_ in frame.reads:
             if addr == sender:
                 deps[("storage", sender, slot)] = state.storage(sender, slot)
+            elif relax and declares(cfg, state.code(addr), slot):  # RM-3
+                deps[("storage", addr, slot)] = state.storage(addr, slot)
         if kind == DEPLOY:
             deps[("code", target)] = code
             check_trace(frame, sender, True, state, cfg)
@@ -359,7 +364,7 @@ def simulate(tx: FrameTx, prefix: Prefix, head: Head, state: State, cfg: FramePo
                 _fail(E.ErrFramePrefixReverted)
         else:
             if not (kind == PAY and code == cfg.canonical_paymaster_code):
-                check_trace(frame, sender, False, state, cfg)
+                check_trace(frame, sender, False, state, cfg, relax)
             for addr, slot, expected, *_ in frame.reads:
                 if addr == sender and slot in deployed_storage:
                     value = deployed_storage[slot]
