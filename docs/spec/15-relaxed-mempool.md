@@ -47,7 +47,8 @@ modules:
 - RM-4 lets a declared contract have several pending transactions on
   disjoint non-zero nonce keys;
 - RM-5 lifts FP-11's count for a payer whose code declares the most one
-  transaction can take from its balance;
+  transaction can take from its balance, and has each such transaction
+  reserve at least that much;
 - RM-6 keeps a reputation for each declared code, read from each block's
   access list;
 - RM-7 exports groups of pending transactions for builders;
@@ -62,7 +63,7 @@ modules:
 | `relaxed` | true | whether RM-2 to RM-8 apply; false under every other profile |
 | `declarations` | none | RM-3's declarations, a list; the descriptor names none, and a child descriptor that replaces `RM-3` names a contract's (DS-5) |
 | `sender_bound` | true | whether RM-4 asks for a declared sender and declared sender reads; false is the relaxation alone, kept to be measured (RM-9) |
-| `outflow_bound` | true | whether RM-4 and RM-5 ask the payer for an outflow bound and the transaction to reserve it; false is the relaxation alone, kept to be measured (RM-9) |
+| `outflow_bound` | true | whether RM-4 and RM-5 ask the payer for an outflow bound and the transaction to reserve at least it; false is the relaxation alone, kept to be measured (RM-9) |
 | `ban_violations` | 3 | RM-6: violations at which a declared code is banned |
 | `throttled_count` | 4 | RM-6: relaxed pending transactions a throttled code may be relied on by; CG-11's `throttled_entity_mempool_count` |
 | `declaration_refresh_seconds` | 3600 | RM-6: how often violations decay; CG-11's `refresh_seconds` |
@@ -96,7 +97,6 @@ one descriptor agree on it.
 | Code | Raised by |
 | --- | --- |
 | `ErrWriteOnceBusy` | RM-3 |
-| `ErrRelaxedReserve` | RM-5 |
 | `ErrDeclarationThrottled`, `ErrDeclarationBanned` | RM-6 |
 | `ErrRelayUnchecked` | RM-8 |
 
@@ -170,8 +170,9 @@ module, when:
 2. under `sender_bound`, its sender's code has a declaration, and every
    sender storage slot its prefix reads is declared
    write-once by it; those reads are then RM-3's, with its unset-slot rule;
-3. under `outflow_bound`, its payer passes RM-5's reserve, whether the payer
-   is the sender or not, unless the payer is the canonical paymaster.
+3. under `outflow_bound`, its payer passes RM-5's reserve, and it reserves
+   what RM-5 says, whether the payer is the sender or not, unless the payer
+   is the canonical paymaster.
 
 Otherwise `ErrFrameSenderBusy` stands. **Source:** EIP-8250 at `258836f9`,
 Rationale: "A future policy MAY admit multiple pending frame transactions for
@@ -189,18 +190,26 @@ that pays for them. Items 2 and 3 close each:
 
 **RM-5. The payer's count lifted.** Under `relaxed`, a transaction FP-11
 refuses with `ErrFramePaymasterBusy` is admitted, if it passes every other
-module and FP-11's exposure check holds, when, under `outflow_bound`, its
-payer passes the **reserve**: the payer's code has a declaration, its
-`max_outflow` $X$ is not `null`, and the transaction's
-`max_cost` $m$ (MD-5) is at least $X$. The pool MUST refuse with
-`ErrRelaxedReserve` a transaction whose payer has such a declaration and whose
-$m$ is below $X$. Otherwise `ErrFramePaymasterBusy` stands. Without
-`outflow_bound`, the exposure check alone is asked. FP-11's exposure check is
-unchanged:
+module, when, under `outflow_bound`, its payer passes the **reserve**: the
+payer's code has a declaration and its `max_outflow` $X$ is not `null`.
+Otherwise `ErrFramePaymasterBusy` stands. A transaction admitted through the
+reserve, here or under RM-4 item 3, **reserves** $r$ of its payer's balance
+in place of its `max_cost` $m$ (MD-5):
 
 $$
-\mathit{balance}(P) - R(P) - w(P) \ge m
+r = \max(m, X)
 $$
+
+FP-11's exposure check asks $r$ of it, $R(P)$ counts $r$ for it, and FP-15
+step 4 counts it again with $r$; the pool MUST refuse with
+`ErrFramePayerExposure` one whose $r$ the check does not cover:
+
+$$
+\mathit{balance}(P) - R(P) - w(P) \ge r
+$$
+
+Without `outflow_bound`, the count is lifted and the exposure check asks
+$m$, as FP-11 does.
 
 **Source:** EIP-8141 at `258836f9`, "Non-canonical paymaster" ("each
 non-canonical paymaster can only be used with no more than
@@ -218,6 +227,10 @@ applies to every payer"), the sum it keeps. *Interpretation*, decision record
   transactions in the order received, and once it has removed one relaxed
   transaction the rest fit. So one write removes at most one relaxed
   transaction, beside at most one the canonical rules admitted (RM-9);
+- a contract that sends and pays for its own withdrawals, each of which pays
+  out an amount besides its gas, declares $X$ as that amount and the gas,
+  above `max_cost`. Each of its relaxed withdrawals reserves $X$, so one
+  withdrawal's inclusion, which takes at most $X$, uncovers no other;
 - the canonical paymaster keeps EIP-8141's own bound, its delayed
   withdrawal $w(P)$, and is not asked for a reserve;
 - a bound ticket paymaster refuses a `max_cost` above its denomination
@@ -317,9 +330,12 @@ setting of each node:
   1. every frame of its prefix is protocol-defined, a frame the EIP
      evaluates directly (FP-9): default code, the expiry verifier, or the
      canonical paymaster. The relay evaluates it as FP-8 does;
-  2. it carries a claim that CG-2, CG-9 and, under `binding`, CG-12 accept.
-     The relay runs FP-2 to FP-7, FP-11's exposure check, FP-12 with RM-4's
-     first item, and those checks, and not the prefix.
+  2. it carries a claim that CG-2, CG-9 and, under `binding`, CG-12 accept,
+     under a ticket scheme whose CG-9 check is not itself a proof: CG-10's
+     ticket, checked in one BLS12-381 pairing, is one. The relay runs FP-2
+     to FP-7, FP-11's exposure check, FP-12 with RM-4's first item, and
+     those checks, and not the prefix. Under a scheme whose ticket is a
+     proof, a relay checks no claim, and admits under item 1 only.
 
   It forwards each transaction it admits without the proofs of its
   dependencies, which a verifier fetches. Under item 2 it forwards one
@@ -343,6 +359,10 @@ record 0081:
   with a ticket, an issuer's price for one slot in one epoch. A transaction
   that carries no claim and runs code in its prefix is carried by verifiers
   alone.
+- **The bound is the ticket scheme's.** It holds as far as a relay can tell
+  a valid ticket from a forged one without verifying a proof, which CG-10's
+  pairing does. A scheme whose ticket is itself a proof gives a relay
+  nothing to check before a verifier does, and item 2 does not apply to it.
 
 ## The bound
 
@@ -364,11 +384,21 @@ one relaxed pending transaction, unless it is a violation (RM-6):
 Each write also removes at most what the canonical rules let it, beside the
 relaxed one. Without `sender_bound` or `outflow_bound`, one write to a
 sender's or payer's balance, code or storage removes every relaxed
-transaction that depends on it. **Source:** RM-3 to RM-6, and FP-15.
-*Interpretation*, decision record 0082. Experiment 27
+transaction that depends on it.
+
+The bound counts removals, not re-runs. A write also makes FP-15 step 3
+re-run the prefix of every pending transaction that recorded the item
+written. `relaxed.json` keeps FP-15's `reuse_balance` false, the canonical
+value, so a write to a payer's balance re-runs the prefix of every pending
+transaction it pays for, removed or not. A child descriptor may set it
+(DS-5): a balance write then re-runs none unless the balance goes from or to
+zero, and FP-15 step 4 still counts each reserve against the new balance.
+**Source:** RM-3 to RM-6, and FP-15. *Interpretation*, decision record 0082.
+Experiment 27
 (`experiments/27-relaxed-tiers/README.md`) measures this bound, with each
 tier's needs, under the canonical rules, under `relaxed.json`, and with
-every node verifying.
+every node verifying, and counts each write's re-runs with and without
+`reuse_balance`.
 
 ## Not modelled
 

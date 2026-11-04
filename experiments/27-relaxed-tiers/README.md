@@ -4,8 +4,9 @@
 rules, what they refuse to a contract that sends or pays for its own
 transactions. Does one write, other than one that breaks a declaration,
 still invalidate at most one pending transaction that only the relaxations
-admitted, and by how much do the relaxations as first asked miss that? Is a
-broken declaration seen in the access list of the block that carries it, and
+admitted, and by how much do the relaxations as first asked miss that? How
+many prefixes does one write make a node run again, beside the transactions
+it removes? Is a broken declaration seen in the access list of the block that carries it, and
 what is the declared code's rate after? And what does each tier need at a
 stated rate of proof-carrying transactions, a relay that checks no proof
 against a verifier, a network of both against one in which every node
@@ -19,7 +20,8 @@ descriptors themselves: `docs/spec/descriptors/eip-8141.json`, and
 `docs/spec/descriptors/relaxed.json` with a child descriptor that replaces
 RM-3 to name the declarations (`docs/spec/13-descriptors.md`, DS-5). The
 relaxations as first asked are a child of that one with `sender_bound` and
-`outflow_bound` false (decision record 0082). Nothing in it is a clause.
+`outflow_bound` false (decision record 0082), and another child sets
+FP-15's `reuse_balance`. Nothing in it is a clause.
 
 ## Setup
 
@@ -39,7 +41,8 @@ relaxations as first asked are a child of that one with `sender_bound` and
   second reader of one; 64 withdrawals of the note pool, each reading its
   own nullifier and a past root; 10 withdrawals that read the note pool's
   undeclared slot; 60 transactions paid by the ticket paymaster and 10 more
-  whose `max_cost` is half its bound; 20 paid by `upm`; the 30 of `e0`,
+  whose `max_cost` is half its bound, which RM-5 has reserve the bound all
+  the same; 20 paid by `upm`; the 30 of `e0`,
   `d0` and `c0`; and 40 plain ones. The note pool's balance is 64
   withdrawals' `max_cost`, the ticket paymaster's what all 70 of its
   transactions reserve.
@@ -51,7 +54,8 @@ relaxations as first asked are a child of that one with `sender_bound` and
   its bound, from a balance set to just what its pending transactions
   reserve; and `upm` paying out everything. A write breaks a declaration as
   RM-6 reads it: a declared slot whose value before is not 0, or a payment
-  beyond the declared bound.
+  beyond the declared bound. For each write the pool's removals are counted,
+  and the prefixes FP-15 step 3 ran again.
 - **Section 2.** A pool whose root contract's declaration was broken 0 to 3
   times, one block each, then 20 new readers of roots no violation touched,
   at 0, 1 and 2 hours, the pool emptied before each 20.
@@ -95,7 +99,8 @@ It takes about 80 s; `make experiments` checks the committed results.
 | descriptor | admitted by the canonical modules | admitted by a relaxation | most relaxed removed by one write | most removed in all |
 | --- | --- | --- | --- | --- |
 | canonical | 46 | 0 | 0 | 1 |
-| `relaxed.json`, declarations | 45 | 275 | 1 | 1 |
+| `relaxed.json`, declarations | 45 | 280 | 1 | 1 |
+| the same, `reuse_balance` | 45 | 280 | 1 | 1 |
 | as first asked | 45 | 330 | 19 | 20 |
 
 As first asked, one payment out of `upm`, which declares nothing, removes
@@ -104,7 +109,16 @@ removes 9 and 1; a write to `c0`'s slot 9 and 1; a write to the note pool's
 undeclared slot 8. Under `relaxed.json` each of these removes at most the
 one transaction the canonical rules admitted, because none of the others was
 admitted: the stream's refusals include 37 `ErrFrameSenderBusy`, 19
-`ErrFramePaymasterBusy`, 10 `ErrRelaxedReserve` and 16 `ErrWriteOnceBusy`.
+`ErrFramePaymasterBusy` and 16 `ErrWriteOnceBusy`, and 5
+`ErrFramePayerExposure` for ticket-paid transactions whose reserve the
+paymaster's balance no longer covered.
+
+**Re-runs by one write** (section 1, "re-run"). Under `relaxed.json` one
+payment out of the ticket paymaster, within its bound, removes one
+transaction and re-runs 65 prefixes, every transaction it pays for; one out
+of the note pool re-runs 64. Under `reuse_balance` both re-run none, and the
+most any write re-runs is 15, the readers of a rewritten root, every one of
+which it removes. As first asked, one payment re-runs 70.
 
 **Breaking a declaration.** Rewriting a past root removes up to 15 pending
 transactions, every one that read it, under both relaxed descriptors. Each
@@ -148,6 +162,14 @@ second verifying; with one verifier in five, 2.6.
   account with no code, or an undeclared contract, can change what all its
   pending transactions read. Those are decision record 0082's three cases,
   each measured.
+- **The bound is on removals, not on work.** Under `relaxed.json`, which
+  keeps FP-15's `reuse_balance` false as `eip-8141.json` does, a payer's
+  balance is a dependency of every transaction it pays for, so a payment
+  that removes one makes a node re-run all 65. A child descriptor that sets
+  `reuse_balance` re-runs none on a balance change and removes the same
+  transactions, since FP-15 step 4 counts each reserve against the new
+  balance. Whether `relaxed.json` itself should set it is open: it changes
+  FP-15 for canonical transactions too.
 - **A contract's relaxed transactions can keep out its later canonical
   one.** The canonical descriptor admitted 46 transactions, the canonical
   modules under `relaxed.json` 45. The one between them is a withdrawal

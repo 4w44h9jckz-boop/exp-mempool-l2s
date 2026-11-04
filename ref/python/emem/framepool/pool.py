@@ -46,6 +46,12 @@ class Entry:
     relaxed: frozenset = frozenset()  # RM-2: the relaxations that admitted it, of `reads`, `sender` and `payer`
     declared: tuple = ()  # RM-3: the declared slots it reads, as (address, slot)
     relies: frozenset = frozenset()  # RM-6: the declared codes it relies on
+    reserve: int | None = None  # RM-5: what it reserves of its payer's balance, when not its max_cost
+
+    @property
+    def reserved(self) -> int:
+        """FP-11's share of its payer's balance: its max_cost, or RM-5's reserve."""
+        return self.tx.max_cost if self.reserve is None else self.reserve
 
 
 class FramePool:
@@ -101,6 +107,8 @@ class FramePool:
         self._marks: set[str] = set()  # RM-2: the relaxations the running judgement has used
         self._relies: set[str] = set()  # RM-6: the declared codes it has relied on
         self._sim: Simulation | None = None  # the running judgement's simulation, for RM-4
+        self._old: Entry | None = None  # the pending transaction the running judgement replaces, for RM-5
+        self._reserving: int | None = None  # RM-5: what the running judgement reserves
     # --- the pool interface (MD-8) --------------------------------------------
 
     def add(self, txs: list[FrameTx], now: float = 0) -> list[str]:
@@ -203,7 +211,8 @@ class FramePool:
         for h in again:
             e = self.entries[h]
             try:
-                self._check_payer(e.tx, e.sim.payer, e.sim.payer_class, None, lifted="payer" in e.relaxed)
+                self._check_payer(e.tx, e.sim.payer, e.sim.payer_class, None, lifted="payer" in e.relaxed,
+                                  amount=e.reserved)
             except TxError as err:
                 self._remove(h, "payer:" + err.code, account=False)
                 continue
@@ -448,7 +457,7 @@ class FramePool:
             self._relaxing = self._judged = False
 
     def _admit(self, tx: FrameTx, now: float = 0) -> str:
-        self._marks, self._relies, self._sim = set(), set(), None
+        self._marks, self._relies, self._sim, self._old, self._reserving = set(), set(), None, None, None
         try:
             if tx.hash in self.entries:  # FP-2
                 raise TxError(E.ErrAlreadyKnown)
@@ -462,6 +471,7 @@ class FramePool:
                 self.work[tx.sender] += admission_gas(tx, prefix)
             old_hash = None if self._many(tx) else self.by_identity.get((tx.sender, tx.nonce_keys, tx.nonce_seq))
             old = self.entries[old_hash] if old_hash is not None else None
+            self._old = old
             early = self.config.static_first and not self.matcha
             if early:  # Admission under `static_first`: FP-7, then FP-11 and FP-12, before the prefix runs
                 if expiring(tx, self.config):  # EN-4
@@ -510,7 +520,7 @@ class FramePool:
                 else:
                     self.widths[tx.sender] -= tx_charge
             self._insert(Entry(tx, seq, prefix, sim, now, tx_charge, cls=cls, relaxed=frozenset(self._marks),
-                               declared=declared, relies=frozenset(self._relies)))
+                               declared=declared, relies=frozenset(self._relies), reserve=self._reserving))
             return E.OK
         except TxError as err:
             return err.code
@@ -522,17 +532,17 @@ class FramePool:
         return simulate(tx, prefix, head, state, cfg, cfg.expiry_margin, head.slot + 1, cfg.root_margin, relax)
 
     def _check_payer(self, tx: FrameTx, payer: str, payer_class: str, old: Entry | None,
-                     lifted: bool = False) -> None:
+                     lifted: bool = False, amount: int | None = None) -> None:
         """FP-11, with RM-5 in the second judgement of RM-2; `lifted` for a transaction RM-5 admitted, which FP-15
-        step 4 counts again without the count."""
+        step 4 counts again without the count, and `amount` for one that reserves more than its max_cost."""
         cfg = self.config
         reserved = self.reserved.get(payer, 0)
         count = self.payer_count.get(payer, 0)
         if old is not None and old.sim.payer == payer:
-            reserved -= old.tx.max_cost
+            reserved -= old.reserved
             count -= 1
         withdrawal = self.state.withdrawal(payer) if payer_class == "canonical" else 0
-        if self.state.balance(payer) - reserved - withdrawal < tx.max_cost:
+        if self.state.balance(payer) - reserved - withdrawal < (tx.max_cost if amount is None else amount):
             raise TxError(E.ErrFramePayerExposure)
         capped = payer_class == "noncanonical" or (payer_class == "default" and cfg.cap_codeless_payers)
         if capped and count >= cfg.max_pending_noncanonical and not lifted:
@@ -707,13 +717,18 @@ class FramePool:
         return not self._full.outflow_bound or self._reserve(tx, payer)
 
     def _reserve(self, tx: FrameTx, payer: str) -> bool:
-        """RM-5's reserve: a declared payer with a bound X, and a max_cost of at least X."""
+        """RM-5's reserve: a declared payer with a bound X, of whose balance the transaction reserves the larger of
+        its max_cost and X, which FP-11's exposure check must cover."""
         code = self.state.code(payer)
         d = declaration(self._full, code)
         if d is None or d[2] is None:
             return False
-        if tx.max_cost < d[2]:
-            raise TxError(E.ErrRelaxedReserve)
+        r = max(tx.max_cost, d[2])
+        old = self._old
+        reserved = self.reserved.get(payer, 0) - (old.reserved if old is not None and old.sim.payer == payer else 0)
+        if self.state.balance(payer) - reserved < r:  # a payer under the reserve is never the canonical paymaster
+            raise TxError(E.ErrFramePayerExposure)
+        self._reserving = r
         self._relies.add(code)
         return True
 
@@ -818,7 +833,7 @@ class FramePool:
                 sim = Simulation(payer, payer_class, deps, None)
             else:
                 raise TxError(E.ErrRelayUnchecked)
-            reserved = self.reserved.get(sim.payer, 0) - (old.tx.max_cost if old and old.sim.payer == sim.payer else 0)
+            reserved = self.reserved.get(sim.payer, 0) - (old.reserved if old and old.sim.payer == sim.payer else 0)
             withdrawal = self.state.withdrawal(sim.payer) if sim.payer_class == "canonical" else 0
             if self.state.balance(sim.payer) - reserved - withdrawal < tx.max_cost:  # FP-11's exposure check
                 raise TxError(E.ErrFramePayerExposure)
@@ -861,7 +876,7 @@ class FramePool:
 
     def _account(self, e: Entry, sign: int) -> None:
         payer = e.sim.payer
-        self.reserved[payer] = self.reserved.get(payer, 0) + sign * e.tx.max_cost
+        self.reserved[payer] = self.reserved.get(payer, 0) + sign * e.reserved
         self.payer_count[payer] = self.payer_count.get(payer, 0) + sign
         if self.payer_count[payer] == 0:
             del self.reserved[payer], self.payer_count[payer]

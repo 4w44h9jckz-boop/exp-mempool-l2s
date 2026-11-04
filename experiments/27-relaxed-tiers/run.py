@@ -13,9 +13,10 @@ pool and the descriptors themselves:
 
 1. the worst-case invalidation from one write, over every write the pool
    knows a key for, under the canonical descriptor, under `relaxed.json` with
-   declarations, and under `relaxed.json` with `sender_bound` and
-   `outflow_bound` false, the relaxations as first asked (decision record
-   0082);
+   declarations, with and without FP-15's `reuse_balance`, and under
+   `relaxed.json` with `sender_bound` and `outflow_bound` false, the
+   relaxations as first asked (decision record 0082), with the prefixes each
+   write makes the pool run again (FP-15 step 3);
 2. whether each kind of violated declaration is seen in the access list of
    the block that carries it, and what the declared code's rate is after;
 3. what each tier needs at a stated rate of proof-carrying transactions,
@@ -80,16 +81,20 @@ HISTORY = (100_000, 100_000)  # the ticket paymaster's seen and included (AM-13)
 
 
 def descriptors():
-    """The canonical descriptor, and `relaxed.json` with RM-3 naming the declarations, and its literal child."""
+    """The canonical descriptor; `relaxed.json` with RM-3 naming the declarations; a child of that with FP-15's
+    `reuse_balance`; and one with `sender_bound` and `outflow_bound` false, the relaxations as first asked."""
     store = Store()
     canonical = store.load((SPEC / "eip-8141.json").read_text())
     relaxed = store.load((SPEC / "relaxed.json").read_text())
     child = store.load_value({"format": 1, "name": "relaxed, with declarations", "source": "experiment 27",
                               "parent": relaxed.id, "remove": [], "rules": {"RM-3": {"declarations": DECLARATIONS}}})
+    reuse = store.load_value({"format": 1, "name": "relaxed, reusing balances", "source": "experiment 27",
+                              "parent": child.id, "remove": [], "rules": {"FP-15": {"reuse_balance": True}}})
     literal = store.load_value({"format": 1, "name": "relaxed, as first asked", "source": "experiment 27",
                                 "parent": child.id, "remove": [],
                                 "rules": {"RM-4": {"sender_bound": False}, "RM-5": {"outflow_bound": False}}})
     return {"canonical": compile_config(canonical), "relaxed": compile_config(child),
+            "relaxed, reuse_balance": compile_config(reuse),
             "relaxed, as first asked": compile_config(literal)}, child.id
 
 
@@ -215,8 +220,8 @@ def writes(state: State):
 
 
 def apply(pool: FramePool, write) -> tuple[Counter, int]:
-    """The write at the next head, with its block's access list; what the pool removed, by class, and RM-6's
-    count of violations after."""
+    """The write at the next head, with its block's access list; what the pool removed, by class, the prefixes it
+    re-ran (FP-15 step 3), and RM-6's count of violations after."""
     kind, _, addr, (field, slot), value = write
     state = pool.state.copy()
     acc = state.edit(addr)
@@ -240,6 +245,7 @@ def apply(pool: FramePool, write) -> tuple[Counter, int]:
     for h, relaxed in before.items():
         if h not in pool.entries:
             removed["relaxed" if relaxed else "canonical"] += 1
+    removed["re-run"] = len(pool.resimulated)
     return removed, sum(pool.violations.values())
 
 
@@ -255,7 +261,7 @@ def bound(configs: dict) -> tuple[list, dict]:
             results[code] += 1
             if code == "ok":
                 admitted["relaxed" if pool.entries[tx.hash].relaxed else "canonical"] += 1
-        worst = {"relaxed": (0, ""), "all": (0, ""), "violating": (0, "")}
+        worst = {"relaxed": (0, ""), "all": (0, ""), "violating": (0, ""), "re-run": (0, "")}
         by_kind: dict[str, Counter] = {}
         seen = 0
         for w in writes(state):
@@ -265,6 +271,9 @@ def bound(configs: dict) -> tuple[list, dict]:
             k = by_kind.setdefault(kind, Counter())
             k["relaxed"] = max(k["relaxed"], removed["relaxed"])
             k["all"] = max(k["all"], removed["relaxed"] + removed["canonical"])
+            k["re-run"] = max(k["re-run"], removed["re-run"])
+            if removed["re-run"] > worst["re-run"][0]:
+                worst["re-run"] = (removed["re-run"], kind)
             if violating:
                 seen += violations > 0
                 if removed["relaxed"] + removed["canonical"] > worst["violating"][0]:
@@ -277,7 +286,7 @@ def bound(configs: dict) -> tuple[list, dict]:
         violating = sum(1 for w in writes(state) if w[1])
         rows.append([name, admitted["canonical"], admitted["relaxed"], sum(results.values()) - sum(admitted.values()),
                      *worst["relaxed"], *worst["all"], *worst["violating"],
-                     f"{seen} of {violating}" if cfg.relaxed else "n/a"])
+                     f"{seen} of {violating}" if cfg.relaxed else "n/a", *worst["re-run"]])
         detail[name] = (by_kind, results)
     return rows, detail
 
@@ -490,7 +499,8 @@ def main() -> None:
     configs, child = descriptors()
     rows, detail = bound(configs)
     kinds = sorted({k for by_kind, _ in detail.values() for k in by_kind})
-    per_kind = [[k] + [f"{detail[n][0][k]['relaxed']} / {detail[n][0][k]['all']}" for n in configs] for k in kinds]
+    per_kind = [[k] + [f"{detail[n][0][k]['relaxed']} / {detail[n][0][k]['all']} / {detail[n][0][k]['re-run']}"
+                       for n in configs] for k in kinds]
     refusals = sorted({c for _, results in detail.values() for c in results if c != "ok"})
     codes = [[c] + [detail[n][1][c] for n in configs] for c in refusals]
     after = rate_after(configs["relaxed"])
@@ -508,12 +518,13 @@ def main() -> None:
         "copy of that pool, every write it knows a key for, at the next head with its block's access list. "
         "Admitted counts what the canonical modules admitted and what only the relaxations did (RM-2); the worst "
         "write is the one that removed the most, over the writes that break no declaration, and then over those "
-        "that do (RM-6). Seen counts the violating writes whose block raised the declared code's count.",
+        "that do (RM-6). Seen counts the violating writes whose block raised the declared code's count. Re-run is "
+        "the most prefixes one write made the pool run again (FP-15 step 3), over every write, and the write.",
         "",
         table(["descriptor", "canonical", "relaxed", "refused", "relaxed removed", "by", "all removed", "by",
-               "violating: removed", "by", "seen"], rows),
+               "violating: removed", "by", "seen", "re-run", "by"], rows),
         "",
-        "Removed by the worst write of each kind, relaxed / all:",
+        "Removed by the worst write of each kind, relaxed / all, and the prefixes it re-ran:",
         "",
         table(["write"] + list(configs), per_kind),
         "",

@@ -166,7 +166,7 @@ RELAXED = {
     "RM-2": _m(),
     "RM-3": _m("rule", ["ErrWriteOnceBusy"], declarations=DECLS),
     "RM-4": _m("rule", sender_bound=BOOL),
-    "RM-5": _m("rule", ["ErrRelaxedReserve"], outflow_bound=BOOL),
+    "RM-5": _m("rule", outflow_bound=BOOL),
     "RM-6": _m("rule", ["ErrDeclarationThrottled", "ErrDeclarationBanned"], ban_violations=INT, throttled_count=INT,
                declaration_refresh_seconds=INT),
     "RM-7": _m(),

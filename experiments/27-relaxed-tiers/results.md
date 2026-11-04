@@ -4,40 +4,40 @@ Produced by `python3 experiments/27-relaxed-tiers/run.py` (seed 27). Do not edit
 
 ## 1. The worst-case invalidation from one write
 
-The same seeded stream of 402 transactions into one pool under each descriptor, then, one at a time on a copy of that pool, every write it knows a key for, at the next head with its block's access list. Admitted counts what the canonical modules admitted and what only the relaxations did (RM-2); the worst write is the one that removed the most, over the writes that break no declaration, and then over those that do (RM-6). Seen counts the violating writes whose block raised the declared code's count.
+The same seeded stream of 402 transactions into one pool under each descriptor, then, one at a time on a copy of that pool, every write it knows a key for, at the next head with its block's access list. Admitted counts what the canonical modules admitted and what only the relaxations did (RM-2); the worst write is the one that removed the most, over the writes that break no declaration, and then over those that do (RM-6). Seen counts the violating writes whose block raised the declared code's count. Re-run is the most prefixes one write made the pool run again (FP-15 step 3), over every write, and the write.
 
-| descriptor | canonical | relaxed | refused | relaxed removed | by | all removed | by | violating: removed | by | seen |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| canonical | 46 | 0 | 356 | 0 |  | 1 | the note pool's undeclared slot | 1 | tpm pays out twice its bound | n/a |
-| relaxed | 45 | 275 | 82 | 1 | a nullifier written | 1 | a nullifier written | 15 | a set root rewritten | 19 of 19 |
-| relaxed, as first asked | 45 | 330 | 27 | 19 | upm, which declares nothing, pays out all it has | 20 | upm, which declares nothing, pays out all it has | 15 | a set root rewritten | 19 of 19 |
+| descriptor | canonical | relaxed | refused | relaxed removed | by | all removed | by | violating: removed | by | seen | re-run | by |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| canonical | 46 | 0 | 356 | 0 |  | 1 | the note pool's undeclared slot | 1 | tpm pays out twice its bound | n/a | 1 | the note pool's undeclared slot |
+| relaxed | 45 | 280 | 77 | 1 | a nullifier written | 1 | a nullifier written | 15 | a set root rewritten | 19 of 19 | 65 | tpm pays out its declared bound |
+| relaxed, reuse_balance | 45 | 280 | 77 | 1 | a nullifier written | 1 | a nullifier written | 15 | a set root rewritten | 19 of 19 | 15 | a set root rewritten |
+| relaxed, as first asked | 45 | 330 | 27 | 19 | upm, which declares nothing, pays out all it has | 20 | upm, which declares nothing, pays out all it has | 15 | a set root rewritten | 19 of 19 | 70 | tpm pays out its declared bound |
 
-Removed by the worst write of each kind, relaxed / all:
+Removed by the worst write of each kind, relaxed / all, and the prefixes it re-ran:
 
-| write | canonical | relaxed | relaxed, as first asked |
-| --- | --- | --- | --- |
-| a nullifier written | 0 / 0 | 1 / 1 | 1 / 1 |
-| a nullifier written twice in one block | 0 / 0 | 1 / 1 | 1 / 1 |
-| a set root rewritten | 0 / 0 | 15 / 15 | 15 / 15 |
-| notes pays out its declared bound | 0 / 1 | 1 / 1 | 1 / 1 |
-| notes pays out twice its bound | 0 / 1 | 2 / 2 | 2 / 2 |
-| the account with no code delegates | 0 / 1 | 0 / 1 | 9 / 10 |
-| the note pool's undeclared slot | 0 / 1 | 0 / 0 | 8 / 8 |
-| the undeclared contract's slot | 0 / 1 | 0 / 1 | 9 / 10 |
-| tpm pays out its declared bound | 0 / 1 | 1 / 1 | 1 / 1 |
-| tpm pays out twice its bound | 0 / 1 | 2 / 2 | 2 / 2 |
-| upm, which declares nothing, pays out all it has | 0 / 1 | 0 / 1 | 19 / 20 |
+| write | canonical | relaxed | relaxed, reuse_balance | relaxed, as first asked |
+| --- | --- | --- | --- | --- |
+| a nullifier written | 0 / 0 / 0 | 1 / 1 / 1 | 1 / 1 / 1 | 1 / 1 / 1 |
+| a nullifier written twice in one block | 0 / 0 / 0 | 1 / 1 / 1 | 1 / 1 / 1 | 1 / 1 / 1 |
+| a set root rewritten | 0 / 0 / 0 | 15 / 15 / 15 | 15 / 15 / 15 | 15 / 15 / 15 |
+| notes pays out its declared bound | 0 / 1 / 1 | 1 / 1 / 64 | 1 / 1 / 0 | 1 / 1 / 63 |
+| notes pays out twice its bound | 0 / 1 / 1 | 2 / 2 / 64 | 2 / 2 / 0 | 2 / 2 / 63 |
+| the account with no code delegates | 0 / 1 / 1 | 0 / 1 / 1 | 0 / 1 / 1 | 9 / 10 / 10 |
+| the note pool's undeclared slot | 0 / 1 / 1 | 0 / 0 / 0 | 0 / 0 / 0 | 8 / 8 / 8 |
+| the undeclared contract's slot | 0 / 1 / 1 | 0 / 1 / 1 | 0 / 1 / 1 | 9 / 10 / 10 |
+| tpm pays out its declared bound | 0 / 1 / 1 | 1 / 1 / 65 | 1 / 1 / 0 | 1 / 1 / 70 |
+| tpm pays out twice its bound | 0 / 1 / 1 | 2 / 2 / 65 | 2 / 2 / 0 | 2 / 2 / 70 |
+| upm, which declares nothing, pays out all it has | 0 / 1 / 1 | 0 / 1 / 1 | 0 / 1 / 1 | 19 / 20 / 20 |
 
 Refusals in the stream, by code:
 
-| code | canonical | relaxed | relaxed, as first asked |
-| --- | --- | --- | --- |
-| ErrFramePayerExposure | 0 | 0 | 11 |
-| ErrFramePaymasterBusy | 88 | 19 | 0 |
-| ErrFrameSenderBusy | 36 | 37 | 0 |
-| ErrFrameStorageReadNonSender | 232 | 0 | 0 |
-| ErrRelaxedReserve | 0 | 10 | 0 |
-| ErrWriteOnceBusy | 0 | 16 | 16 |
+| code | canonical | relaxed | relaxed, reuse_balance | relaxed, as first asked |
+| --- | --- | --- | --- | --- |
+| ErrFramePayerExposure | 0 | 5 | 5 | 11 |
+| ErrFramePaymasterBusy | 88 | 19 | 19 | 0 |
+| ErrFrameSenderBusy | 36 | 37 | 37 | 0 |
+| ErrFrameStorageReadNonSender | 232 | 0 | 0 | 0 |
+| ErrWriteOnceBusy | 0 | 16 | 16 | 16 |
 
 ## 2. A violated declaration's rate after
 

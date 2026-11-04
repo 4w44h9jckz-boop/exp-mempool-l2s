@@ -1,6 +1,8 @@
 # 0082. Many pending per sender and the payer's count lifted are bounded by a declared contract and a reserve
 
-Date: 2026-11-04. Status: accepted.
+Date: 2026-11-04. Status: accepted. Item 2's reservation, $\max(m, X)$,
+replaces this record's first refusal of $m < X$, before it was merged, so
+that a contract paying out more than its gas can use the reserve.
 
 ## Context
 
@@ -51,33 +53,38 @@ gives the canonical paymaster a delayed withdrawal, $w(P)$, instead.
      code no transaction can change.
    - Its relaxed transactions read only sender slots its code declares
      write-once, under RM-3's rule.
-2. **A relaxed transaction reserves its payer's outflow bound (RM-5,
-   `outflow_bound`).**
+2. **A relaxed transaction reserves at least its payer's outflow bound
+   (RM-5, `outflow_bound`).**
    - The payer's declaration names $X$, the most one transaction takes from
      its balance.
-   - Each relaxed transaction it pays for must have $m \ge X$.
+   - Each relaxed transaction it pays for reserves $r = \max(m, X)$ in
+     place of its `max_cost` $m$, in FP-11's sum and in FP-15 step 4.
+   - A contract that sends and pays for its own withdrawals, each paying
+     out an amount besides its gas, has $X$ above $m$: the payout and the
+     gas. Asking $m \ge X$ would refuse every one of them, and reserving
+     only $m$ would let one payout uncover more than one.
    - This applies to RM-4's transactions too, whose payer is often the
      sender, except when the payer is the canonical paymaster, which keeps
      EIP-8141's own bound.
    - RM-6 checks $X$ against each block's access list, as it checks
      write-once slots.
 3. **Why the reserve bounds one write to one relaxed transaction.**
-   - Before the write, $\mathit{balance}(P) - w(P) \ge \sum_i m_i$ over the
-     payer's pending transactions.
+   - Before the write, $\mathit{balance}(P) - w(P) \ge \sum_i r_i$ over the
+     payer's pending transactions, where $r_i$ is $m_i$ for one the
+     canonical rules admitted.
    - A write lowers the balance by $\delta \le X$.
    - FP-15 step 4 keeps transactions in the order received while they fit,
      and removes the first that does not. Call it $j$.
-   - If $j$ is relaxed, $m_j \ge X \ge \delta$. Then every later
+   - If $j$ is relaxed, $r_j \ge X \ge \delta$. Then every later
      transaction fits, since
-     $\sum_{i \ne j} m_i \le \mathit{balance}(P) - w(P) - m_j \le \mathit{balance}(P) - \delta - w(P)$.
+     $\sum_{i \ne j} r_i \le \mathit{balance}(P) - w(P) - r_j \le \mathit{balance}(P) - \delta - w(P)$.
    - If $j$ is the payer's canonical transaction, the next one removed is
      relaxed, and the same holds after it.
    - So at most one relaxed transaction goes, beside at most one the
      canonical rules admitted.
 4. **For a bound ticket paymaster, $X$ is its denomination.** Its template
    refuses a `max_cost` above the denomination (CG-10's $T_b$), so every
-   ticket-paid transaction can reserve exactly it at no cost to the holder,
-   since `max_cost` is a cap and not a price.
+   ticket-paid transaction reserves exactly the denomination.
 5. **The relaxations alone stay measurable.** `sender_bound` and
    `outflow_bound` are parameters of `RM-4` and `RM-5`, both true in
    `relaxed.json`. Set false, they give the relaxations as stated. Experiment
@@ -90,8 +97,8 @@ gives the canonical paymaster a delayed withdrawal, $w(P)$, instead.
   several needs a declaration and reads only write-once slots in its
   prefixes.
 - **A relaxed payer must declare $X$,** and every transaction it pays for
-  beyond the first reserves $X$. A payer whose single transactions can be
-  large ties up that much per pending transaction.
+  beyond the first reserves at least $X$. A payer whose single transactions
+  can be large ties up that much per pending transaction.
 - **This differs from the ask.** The ask stated FP-11's exposure sum alone
   as relaxation 3's bound, and `disjoint-keys` alone as relaxation 2. This
   record adds the declared contract and the reserve, and says why with the
