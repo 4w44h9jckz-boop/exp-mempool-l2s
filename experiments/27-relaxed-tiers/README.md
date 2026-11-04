@@ -148,6 +148,16 @@ second verifying; with one verifier in five, 2.6.
   account with no code, or an undeclared contract, can change what all its
   pending transactions read. Those are decision record 0082's three cases,
   each measured.
+- **A contract's relaxed transactions can keep out its later canonical
+  one.** The canonical descriptor admitted 46 transactions, the canonical
+  modules under `relaxed.json` 45. The one between them is a withdrawal
+  that reads the note pool's undeclared slot. Under the canonical
+  descriptor it was the pool's first admitted transaction, since its
+  earlier withdrawals read the shared pool's roots and FP-9 refused them.
+  Under `relaxed.json` those were pending, so the canonical modules found
+  the sender busy (FP-12), as they would at any pool holding one of its
+  transactions, and RM-4 refused it too, for its undeclared read. RM-2
+  still admits what the canonical modules admit at the pool's own state.
 - **A broken declaration costs every transaction that read the slot, once.**
   15 for a past root here. It is seen in its own block's access list, the
   second write to an unset slot within a block included, and the code's
