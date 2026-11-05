@@ -389,11 +389,13 @@ BYTECODE". *Interpretation*, decision record 0083:
 - **No recursive input.** The prover's `aggregate` passes no children to
   leanVM's aggregation, so a node folds only signatures it holds. A
   transaction it holds by a received aggregate alone is not in its own.
-- **A mode 0 signature is checked by the node, not the prover.** A
-  leanSPHINCS signature is checked natively, and the prover has no mode
-  for one signature; its `aggregate` refuses a signature that does not open
-  at its message, so a witness the node took wrongly costs it that
-  interval's aggregate.
+- **A mode 0 signature is checked by the prover, alone.** A client's mode 0
+  wrapper reaches a node over `frames_sendWrapper`, and each leanSPHINCS
+  proof's verdict in AG-5's step 5 is the prover's `verify-sphincs`
+  (`11-surface.md`, SF-10; decision record 0084), a mode the prover has
+  since `exp-e2e-frames` `3209255`. Its `aggregate` also refuses a
+  signature that does not open at its message, so a witness the node took
+  wrongly would cost it that interval's aggregate.
 - **One process per call is too slow to fold every interval.** Started
   afresh for each fold, the prover took 2.7 to 3.4 s for an aggregate of
   two or three signatures, at about 413 to 417 MB at peak

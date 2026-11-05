@@ -345,7 +345,11 @@ its hash (SF-3) when AG-6's admission answers `ok`, and the code otherwise.
 It relays none of them (SF-6). **Source:** EIP-8288 at master `e51d38a`,
 "Mempool Wrapper Object": the encoding `[transactions, mode, content]`, mode
 0's `[deps, proofs]` and its four checks, and "Mode 0 is intended to be used
-primarily by clients broadcasting their transactions"; the EIP defines no
+primarily by clients broadcasting their transactions"; `exp-e2e-frames`
+experiment 19's prover at `3209255`, `verify-sphincs`: a 32-byte key, a
+32-byte message and a 7,740-byte signature, each hex with or without `0x`,
+answered `{"verified": ...}` with exit status 0, and any other length or a
+character that is not hex refused with exit status 2; the EIP defines no
 JSON-RPC method. *Interpretation*, decision record 0084:
 
 - **The method and its members are this repository's,** the wrapper's own

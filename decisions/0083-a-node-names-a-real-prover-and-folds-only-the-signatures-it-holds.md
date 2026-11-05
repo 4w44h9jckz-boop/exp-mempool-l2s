@@ -82,3 +82,11 @@ prover, so it is tested against a stub of the same contract.
   each fold, it took 2.7 to 3.4 s, over the 1,000 ms interval. The contract
   is one process for each call, so a resident prover is a different
   contract, not yet specified.
+
+## Amendment, 2026-11-05
+
+Item 4 is superseded by decision record 0084. The prover has a mode for one
+signature since `exp-e2e-frames` `3209255`, `verify-sphincs`, and a client's
+mode 0 proof is checked with it (`11-surface.md`, SF-10), so that a node has
+no leanSPHINCS verifier of its own to keep. What item 4 says of `aggregate`
+still holds: it refuses a witness that does not open at its message.

@@ -783,6 +783,24 @@ says is checked against the primary source before it is relied on.
   412,516,352 to 417,406,976 bytes at peak; and that the prover's `sphincs`
   mode prints bare hex while the stub printed `0x`. Used for AG-11's
   sentence on a resident prover and on hex.
+- **exp-e2e-frames** (branch `claude/zealous-turing-aputwd` at `3209255`,
+  read 2026-11-05):
+  `exp-e2e-frames/experiments/19-x14-hash-based-stealth-addresses-under-8288/prover/src/main.rs`,
+  `verify_sphincs`: one leanSPHINCS signature checked alone, a key of
+  `PUB_KEY_SIZE` bytes, a 32-byte message and a signature of `SIG_SIZE`
+  bytes, 7,740 at leanVM `3cbac04`, each hex with or without `0x`;
+  `{"verified": ..., "verifyMs": ...}` and exit status 0, a wrong length or a
+  character that is not hex refused with exit status 2. Used for
+  `11-surface.md` SF-10, AG-11's bullet on a mode 0 signature, and decision
+  records 0083 and 0084. Read, not built or run here.
+- **exp-e2e-frames** (branch `claude/zealous-turing-aputwd` at `c39af8e`,
+  `70c8fc3`, `cc5d4c9` and `0114573`, read 2026-11-05): experiment 22's
+  README, Amendments 2 and 4, and `results/5-sweep-trial.json`. The
+  skandha node refused a leanSPHINCS-authorized transaction for its chain id and
+  its mode 4 frame, while the patched client mined it. A transaction whose
+  witness signs another hash passed the client's simulation and pool, and
+  its block's proof was rebuilt 21 times, each refused at import, the head
+  staying at 766. Used for decision record 0084.
 - **exp-frames** (branch `exp/42-noir-transfer` at `32586cc`, read
   2026-10-21): `exp-frames/experiments/42-noir-transfer/README.md`, a private transfer on
   Aztec's note and nullifier model, proved in Noir and checked in a `VERIFY`

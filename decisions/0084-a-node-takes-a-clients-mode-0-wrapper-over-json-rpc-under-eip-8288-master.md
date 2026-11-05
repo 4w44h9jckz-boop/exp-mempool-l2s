@@ -58,13 +58,18 @@ their transactions". It defines no JSON-RPC method.
    reference nor skandha has a leanSPHINCS verifier. The prover's contract
    gains a mode, `verify-sphincs <publicKey> <message> <signature>`,
    printing `{"verified": true}` or `{"verified": false}` with exit status
-   0, and a refusal with exit status 2, as its other modes do. The stubs
-   (`conformance/prover-stub.py` and skandha's) mirror it. `exp-e2e-frames`
-   experiment 19's prover has no such mode at `47f5496`, nor on its branch
-   at `d3edeb9` (its `verify` mode checks a leanSTARK). Until it does, it
-   takes an unknown mode's name for a program's path and stops with a
-   non-zero exit status, which item 4 counts as not verified, so a node
-   naming it refuses every wrapper with a dependency rather than admit one.
+   0, and a refusal with exit status 2, as its other modes do. `exp-e2e-frames`
+   experiment 19's prover has it since `3209255`: a 32-byte key, a 32-byte
+   message and a 7,740-byte signature, the size leanVM `3cbac04` fixes, with
+   the measured `verifyMs` beside the verdict; any other length, or a
+   character that is not hex, is a refusal. A well-formed signature that
+   does not open at its message is `{"verified": false}`. The stubs
+   (`conformance/prover-stub.py` and skandha's) mirror the mode and its
+   output, with their stand-in signatures. Before `3209255` the prover had
+   no such mode (its `verify` mode checks a leanSTARK) and took an unknown
+   mode's name for a program's path, exiting non-zero; item 4 counts that
+   as not verified. This supersedes decision record 0083's item 4, that a
+   mode 0 signature is the node's own check.
 
 ## Consequences
 
@@ -76,3 +81,12 @@ their transactions". It defines no JSON-RPC method.
   which this record leaves out.
 - **A node with no prover takes no wrapper.** Under `eip-8288-master` it
   then admits no transaction with a dependency.
+- **A node keeps a wrongly signed dependency from the chain's builder.**
+  `exp-e2e-frames` experiment 22 sent the patched client's own pool a
+  transaction whose witness signs another transaction's hash
+  (`0114573`, `results/5-sweep-trial.json` and Amendment 4). The pool's
+  simulation passed it and the pool admitted it, since the client checks
+  the signature only at import. The builder then rebuilt one block's proof
+  21 times, each refused at import, and the head stayed where it was. A
+  node under SF-10 asks `verify-sphincs` before admission, answers that
+  wrapper `ErrWrapperProof`, and hands nothing on.
