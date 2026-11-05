@@ -1,8 +1,9 @@
 # 11. The surface: real frame transactions in and out of the pool
 
-Version 4, 2026-10-21. Version 1 did not decode a recent-root verifier frame's
+Version 5, 2026-11-05. Version 1 did not decode a recent-root verifier frame's
 tuples; version 2 did not read a claim; version 3 did not read whether a
-claim is bound to its transaction; see the version notes at the end.
+claim is bound to its transaction; version 4 had no profile with dependency
+frames and took no wrapper; see the version notes at the end.
 
 The model has no RLP, no signatures and no EVM (`00-model.md`). This document
 specifies the layer around a frame pool that a node needs to take real
@@ -27,6 +28,9 @@ It was read from:
   `eth/fetcher/tx_fetcher.go` (`Enqueue`);
 - libp2p's gossipsub v1.1 specification at libp2p/specs `c750236d`,
   "Extended Validators";
+- EIP-8288 at ethereum/EIPs master `e51d38a` (2026-11-05, Draft): "New
+  Frame Mode", "Transaction Dependencies" and "Mempool Wrapper Object", for
+  the `eip-8288-master` profile and SF-10;
 - ethrex at `64b8fc09`, the commit the Hegota testnet runs since 2026-10-07:
   `crates/networking/rpc/ethrex.rs` (`ethrex_simulateFrameTransaction`),
   `crates/vm/levm/src/validation_observer.rs` (`FrameSimViolation`) and
@@ -35,15 +39,19 @@ It was read from:
 ## Profiles
 
 **SF-1. Parameters.** The surface's parameters, by the frame pool profile
-of FP-1:
+of FP-1 and AG-1:
 
-| Parameter | `eip-8141` | `hegota-testnet` | Note |
-| --- | --- | --- | --- |
-| `envelope` | `keyed` | `keyed` | `keyed` is EIP-8250's payload, `[chain_id, nonce_keys, nonce_seq, sender, frames, signatures, fees, blob_versioned_hashes]`; `plain` is EIP-8141's own, with one `nonce` where the two fields are, which ethpandaops' frames-devnet-0 carries (`exp-frames`, README, "Network") |
-| `chain_id` | 1 | 8141 | *Interpretation*: the EIP fixes no chain; 1 is the chain of ethrex's golden vector; the testnet's is 8141 |
-| `max_tx_size` | 131072 | 131072 | go-ethereum's `txMaxSize`, $4 \cdot 32768$ bytes; the testnet's own limit was not read, so this is *Interpretation* for it |
-| `relay` | `eth` | `eth` | how a node relays (SF-6): `eth`, go-ethereum's broadcast and fetcher, or `gossipsub`, a libp2p topic; skandha relays between its own nodes over `gossipsub` (decision record 0051) |
-| `handoff` | false | false | whether the node hands what it admits to an execution client's pool (SF-9); set per node |
+| Parameter | `eip-8141` | `hegota-testnet` | `eip-8288-master` | Note |
+| --- | --- | --- | --- | --- |
+| `envelope` | `keyed` | `keyed` | `keyed` | `keyed` is EIP-8250's payload, `[chain_id, nonce_keys, nonce_seq, sender, frames, signatures, fees, blob_versioned_hashes]`; `plain` is EIP-8141's own, with one `nonce` where the two fields are, which ethpandaops' frames-devnet-0 carries (`exp-frames`, README, "Network") |
+| `chain_id` | 1 | 8141 | 1 | *Interpretation*: the EIP fixes no chain; 1 is the chain of ethrex's golden vector; the testnet's is 8141. A node may set its own, for a chain the profile does not name, such as a local one (decision record 0084) |
+| `max_tx_size` | 131072 | 131072 | 131072 | go-ethereum's `txMaxSize`, $4 \cdot 32768$ bytes; the testnet's own limit was not read, so this is *Interpretation* for it |
+| `relay` | `eth` | `eth` | `eth` | how a node relays (SF-6): `eth`, go-ethereum's broadcast and fetcher, or `gossipsub`, a libp2p topic; skandha relays between its own nodes over `gossipsub` (decision record 0051) |
+| `handoff` | false | false | false | whether the node hands what it admits to an execution client's pool (SF-9); set per node |
+
+`eip-8288-master` is the surface for AG-1's pool profile of that name: EIP-8288
+as master writes it, with dependency frames of mode 4, a zero `data_hash`
+standing for the signature hash, and leanSTARK reserved.
 
 ## Errors
 
@@ -111,7 +119,7 @@ take their defaults.
 | --- | --- |
 | `sender` | `sender`, written `0x` and 40 lowercase hexadecimal digits |
 | `nonce_keys`, `nonce_seq` | the two fields; under `plain`, `(0,)` and `nonce` |
-| `frames` | one frame for each: `mode`, `flags`, `value` as they are; `target` absent when empty and written as `sender` is otherwise; `exec_gas` and `state_gas` from `limits`; `data_size` the length of `data`; `deadline`, for a frame whose target is the profile's `expiry_verifier` and whose `data` is 8 bytes, those bytes as a big-endian integer; and `roots`, under a profile with `recent_roots` (RR-1), for a frame whose target is `recent_root_address` and whose `data` is a whole number of 72-byte tuples, one entry for each, `source_id(32) || uint64_be(slot) || root(32)`, with the source id and the root written `0x` and 64 lowercase hexadecimal digits and the slot as an integer |
+| `frames` | one frame for each: `mode`, `flags`, `value` as they are; `target` absent when empty and written as `sender` is otherwise; `exec_gas` and `state_gas` from `limits`; `data_size` the length of `data`; `deadline`, for a frame whose target is the profile's `expiry_verifier` and whose `data` is 8 bytes, those bytes as a big-endian integer; and `roots`, under a profile with `recent_roots` (RR-1), for a frame whose target is `recent_root_address` and whose `data` is a whole number of 72-byte tuples, one entry for each, `source_id(32) || uint64_be(slot) || root(32)`, with the source id and the root written `0x` and 64 lowercase hexadecimal digits and the slot as an integer; and `deps`, under a frame profile with `dependency_frames` (AG-1), for a frame of mode `dep_frame_mode`, one triple for each whole 96 bytes of its `data`: `scheme` the first 32 bytes as an integer, `data_hash` the next 32 and `vk_hash` the last 32, each written `0x` and 64 lowercase hexadecimal digits, where, under `zero_data_hash` `sig_hash`, a `data_hash` of 32 zero bytes is written as the transaction's signature hash, EIP-8141's `compute_sig_hash` of the bytes received |
 | `signatures` | one for each: `scheme` 0 `arbitrary`, 1 `secp256k1`, 2 `p256`; `signer` absent when empty; `canonical_msg` true when `msg` is empty; for `arbitrary`, `length` the length of `signature`; `valid` false for a `secp256k1` signature that is not 65 bytes or a `p256` one that is not 128, which the acceptance algorithm's step 2 calls malformed, and true otherwise |
 | `tip`, `max_fee` | `max_priority_fee_per_gas`, `max_fee_per_gas` |
 | `size` | the number of bytes received |
@@ -140,9 +148,10 @@ node one `eth_getCode` and one G2 decoding. *Interpretation*, decision
 record 0058.
 
 *Not modelled*: the cryptographic check of a signature, which reaches the
-pool only through the verdict (SF-4); and a dependency frame's triples
-(AG-2), which no profile of this document reads, so such a frame is an
-ordinary frame of its mode and the verdict carries its outcome. A
+pool only through the verdict (SF-4). A dependency frame's triples are
+decoded under a profile with dependency frames (above), and their proofs
+reach the pool only in a wrapper (SF-10); under any other profile such a
+frame is an ordinary frame of its mode, which FP-3 refuses. A
 recent-root verifier frame's tuples are decoded (above), and the verdict
 stands for their check against the contract's entries (RR-6).
 
@@ -218,7 +227,10 @@ to $\lceil \sqrt{n} \rceil$ of its $n$ peers and announces its hash to the
 others, and only announces a transaction over 4096 bytes. Under `gossipsub`,
 it publishes the bytes as one message on the topic
 `/frame-transactions/<chain_id>/raw`, `<chain_id>` in decimal, and the
-router's mesh does the pushing and its gossip the announcing. **Source:**
+router's mesh does the pushing and its gossip the announcing. A node MUST
+NOT relay a transaction with dependencies (AG-4): a peer could not admit it
+without their proofs (AG-6), and this document specifies no wrapper between
+nodes. **Source:**
 EIP-8141, "Acceptance Algorithm" step 8 ("accepted into the public mempool
 and propagated to peers"), "Replacement and Eviction" ("Evicted and replaced
 transactions must not be re-propagated. Re-admission requires receiving the
@@ -233,6 +245,7 @@ sends through the same steps as one from JSON-RPC (SF-5), and then:
 | Outcome | The peer | Relayed (SF-6) | Under `gossipsub` |
 | --- | --- | --- | --- |
 | `ok` | nothing | yes | accept |
+| `ok`, a transaction with dependencies (AG-4) | nothing | no (SF-6) | ignore |
 | `ErrTxTypeNotSupported` or `ErrFrameDecode` | at fault: under `eth` disconnected | no | reject |
 | any other refusal, `ErrAlreadyKnown` included | nothing | no | ignore |
 
@@ -247,7 +260,9 @@ and forwarded"; "Reject message ... trigger the P4 penalty"; "Ignore message
 ... neither delivered nor forwarded ... does not trigger the P4 penalty").
 *Interpretation*, decision record 0051: `ErrFrameMalformed`,
 `ErrInvalidChainId`, `ErrOversizedData` and `ErrFrameBlobs` are a pool's
-refusals in go-ethereum and are treated as such here. *Not modelled*:
+refusals in go-ethereum and are treated as such here; decision record 0084:
+a transaction with dependencies that a node admits from a peer is ignored,
+not accepted, under `gossipsub`, since accepting it would forward it. *Not modelled*:
 go-ethereum's 200 ms pause when more than a quarter of one delivery is
 refused, and its memory of underpriced hashes (decision record 0004).
 
@@ -292,6 +307,55 @@ node keeps the transaction, because its own clauses admitted it. A node whose
 reaches a builder through a client's pool; the parameter exists so that a
 run can show a transaction reaching the chain through a second node rather
 than the one it was sent to.
+
+## Wrappers in
+
+**SF-10. A wrapper over JSON-RPC.** Under a frame profile with
+`dependency_frames` (AG-1), a node MUST take EIP-8288's mode 0 wrapper from a
+client over JSON-RPC's `frames_sendWrapper`, whose one parameter is an object
+with exactly these members:
+
+| Member | Holds |
+| --- | --- |
+| `transactions` | a list of frame transactions, each its bytes as `0x`-prefixed hexadecimal |
+| `mode` | 0 |
+| `deps` | a list of triples, each `[scheme, data_hash, vk_hash]`, `scheme` an integer and the others `0x` and 64 hexadecimal digits |
+| `proofs` | a list of proofs, exactly one for each triple of `deps` and in its order, each its bytes as `0x`-prefixed hexadecimal |
+
+A parameter not of that shape is an invalid-params error (code -32602). The
+node then:
+
+1. applies SF-2 to each transaction, in order; the first failure refuses
+   the whole wrapper;
+2. applies FP-2 to FP-7 and then SF-4 to each transaction, as SF-5 does, so
+   that the client is asked only about one that passes them;
+3. takes each proof's verdict. A leanSPHINCS triple's proof verifies when
+   the node's prover (AG-11), run as
+   `verify-sphincs <vk_hash> <data_hash> <proof>`, prints
+   `{"verified": true}` and exits 0. A proof of any other scheme, or any
+   proof at a node that names no prover, is one it cannot check, and does
+   not verify;
+4. judges the wrapper by AG-5 and AG-6, with these verdicts as its proofs
+   and each leanSPHINCS proof as its witness (AG-11).
+
+A refusal of the whole wrapper, by item 1 or by AG-5, MUST be returned as an
+error with code -32000 whose message begins with the error code. Otherwise
+the node MUST return a list with one entry for each transaction, in order:
+its hash (SF-3) when AG-6's admission answers `ok`, and the code otherwise.
+It relays none of them (SF-6). **Source:** EIP-8288 at master `e51d38a`,
+"Mempool Wrapper Object": the encoding `[transactions, mode, content]`, mode
+0's `[deps, proofs]` and its four checks, and "Mode 0 is intended to be used
+primarily by clients broadcasting their transactions"; the EIP defines no
+JSON-RPC method. *Interpretation*, decision record 0084:
+
+- **The method and its members are this repository's,** the wrapper's own
+  fields written as SF-5 writes bytes. A transaction is sent whole, not by
+  hash, since a client's wrapper carries transactions a node has not seen.
+- **Mode 1 is not taken from a client.** A recursive STARK is a node's own
+  (AG-7), and this document carries none between nodes.
+- **A proof a node cannot check does not verify,** so a node with no prover
+  refuses every wrapper with a dependency with `ErrWrapperProof`, rather
+  than admit a transaction on a proof it did not check.
 
 ## Run procedure
 
@@ -344,3 +408,12 @@ item 42 asks. A run passes or fails on these steps:
   where they come from a ticket; SF-3 and SF-5 gain a bound ticket and a
   copy of it with a higher priority fee, which SF-5 refuses before the
   client is asked (decision record 0067).
+- **Version 5.** The profile `eip-8288-master` (SF-1), for AG-1's pool
+  profile of that name; a node may set its own `chain_id`. SF-3 decodes a
+  dependency frame's triples into `deps` under a profile with dependency
+  frames, a zero `data_hash` written as the signature hash under
+  `sig_hash`. SF-6 relays no transaction with dependencies, and SF-10 takes
+  a client's mode 0 wrapper over `frames_sendWrapper`, its leanSPHINCS
+  proofs checked by the node's prover. Under the two earlier profiles
+  nothing changes, and every vector of version 4 holds and now says
+  version 5 (decision record 0084).

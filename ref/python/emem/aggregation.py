@@ -90,6 +90,14 @@ class Prover:
                 return None
             return out.read_bytes(), float(answer.get("aggregateMs", 0)), int(answer.get("peakRssBytes", 0))
 
+    def verify_sphincs(self, d: Dependency, signature: str) -> bool:
+        """`verify-sphincs`: whether `signature` is a leanSPHINCS signature of the triple's key over its message
+        (`11-surface.md`, SF-10); a refusal is no."""
+        if not self.foldable(d):
+            return False
+        answer = self._run("verify-sphincs", d.vk_hash, d.data_hash, signature)
+        return answer is not None and answer.get("verified") is True
+
     def verify(self, proof: bytes, deps: tuple[Dependency, ...]) -> bool:
         """`verify-aggregate`: whether the bytes cover exactly these triples."""
         with tempfile.TemporaryDirectory() as tmp:

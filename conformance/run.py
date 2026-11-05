@@ -473,7 +473,8 @@ def _model_json(tx: FrameTx) -> dict:
             "max_fee": tx.max_fee, "size": tx.size, "zero_bytes": tx.zero_bytes,
             "frames": [{"mode": f.mode, "flags": f.flags, "target": f.target, "exec_gas": f.exec_gas,
                         "state_gas": f.state_gas, "value": f.value, "data_size": f.data_size,
-                        "deadline": f.deadline, "roots": [list(r) for r in f.roots]} for f in tx.frames],
+                        "deadline": f.deadline, "roots": [list(r) for r in f.roots],
+                        "deps": [[d.scheme, d.data_hash, d.vk_hash] for d in f.deps]} for f in tx.frames],
             "signatures": [{"scheme": s.scheme, "signer": s.signer, "canonical_msg": s.canonical_msg,
                             "valid": s.valid, "length": s.length} for s in tx.signatures],
             "claim": None if tx.claim is None else {"epoch": tx.claim.epoch, "salt": tx.claim.salt,
@@ -486,6 +487,8 @@ def run_surface(case: dict) -> None:
     name = case.get("profile", EIP_8141.name)
     config = case.get("config", {})
     frame_cfg = address_form(PROFILES[name].with_(**config.get("frame", {})))
+    if frame_cfg.prover == "stub":  # AG-11: the stub of the prover's contract (decision record 0083)
+        frame_cfg = frame_cfg.with_(prover=str(Path(__file__).resolve().parent / "prover-stub.py"))
     surface_cfg = SURFACE_PROFILES[name].with_(**config.get("surface", {}))
     head_d = dict(DEFAULT_HEAD)
     head_d.update(case.get("head", {}))
@@ -524,6 +527,12 @@ def run_surface(case: dict) -> None:
             if "as" in step:
                 alias[step["as"]] = got["hash"] if "hash" in got else decode(
                     bytes.fromhex((step.get("rpc") or step["peer"])[2:]), frame_cfg, surface_cfg).label
+            _compare(step["expect"], got, where)
+        elif "wrapper" in step:  # SF-10
+            try:
+                got = node.send_wrapper(step["wrapper"], step.get("client"), now)
+            except ValueError as err:
+                raise Mismatch(f"{where}: {err}") from None
             _compare(step["expect"], got, where)
         elif "head" in step:
             head_d.update(step["head"])

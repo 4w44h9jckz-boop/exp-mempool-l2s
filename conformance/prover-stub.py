@@ -6,6 +6,7 @@ It keeps the prover's contract and not its cryptography (decision record 0083):
     prover-stub.py aggregate <claims.json> <out.bin>
     prover-stub.py verify-aggregate <proof.bin> <claims.json>
     prover-stub.py sphincs <seed hex> <message hex>   (a key and a signature, as the prover's own mode makes them)
+    prover-stub.py verify-sphincs <publicKey hex> <message hex> <signature hex>   (11-surface.md, SF-10)
 
 Like the prover, it reads hex with or without 0x, and `sphincs` prints its key and signature as bare hex.
 
@@ -80,6 +81,10 @@ def main() -> None:
         if proof != aggregate_of(pairs):
             refuse("the proof does not cover these claims")
         print(json.dumps({"verified": True, "verifyMs": 0.0}))
+    elif len(args) == 4 and args[0] == "verify-sphincs":
+        key, message = raw({"publicKey": args[1]}, "publicKey", 32), raw({"message": args[2]}, "message", 32)
+        sig = raw({"signature": args[3]}, "signature")
+        print(json.dumps({"verified": sig == signature(key, message)}))
     elif len(args) == 3 and args[0] == "sphincs":
         seed, message = raw({"seed": args[1]}, "seed", 32), raw({"message": args[2]}, "message", 32)
         key = hashlib.sha256(b"stub-key" + seed).digest()
@@ -87,8 +92,8 @@ def main() -> None:
         print(json.dumps({"publicKey": key.hex(), "signature": sig.hex(), "signatureBytes": len(sig),
                           "verified": True}))
     else:
-        print("usage: prover-stub.py aggregate <claims.json> <out.bin> | verify-aggregate <proof.bin> <claims.json>",
-              file=sys.stderr)
+        print("usage: prover-stub.py aggregate <claims.json> <out.bin> | verify-aggregate <proof.bin> <claims.json> "
+              "| sphincs <seed> <message> | verify-sphincs <publicKey> <message> <signature>", file=sys.stderr)
         sys.exit(1)
 
 
