@@ -107,9 +107,36 @@ class FramePoolConfig:
     max_txs_allowed_unstaked_entity: int = 10000
     same_nonce_key_mempool_count: int = 4
     same_sender_mempool_count: int = 64
+    # 15-relaxed-mempool.md, RM-1
+    relaxed: bool = False  # RM-2 to RM-8
+    declarations: tuple = ()  # RM-3: (code, ((first, count), ...), max_outflow or None); see `with_`
+    sender_bound: bool = True  # RM-4 item 2
+    outflow_bound: bool = True  # RM-4 item 3, RM-5
+    ban_violations: int = 3  # RM-6
+    throttled_count: int = 4  # RM-6
+    declaration_refresh_seconds: int = 3600  # RM-6
+    tier: str = "verifier"  # RM-8: `relay`, `verifier` or `aggregator`, a node's setting
+    # 05-aggregation.md, AG-11
+    prover: str | None = None  # a node's setting: the command of a real prover, or None for the model's flags
 
     def with_(self, **changes) -> FramePoolConfig:
+        if "declarations" in changes:
+            changes["declarations"] = declarations(changes["declarations"])
         return replace(self, **changes)
+
+
+def declarations(value) -> tuple:
+    """RM-1's declarations as the pool holds them: each (code, ((first, count), ...), max_outflow or None), from a
+    descriptor's list of objects or a tuple already in this form."""
+    out = []
+    for d in value:
+        if isinstance(d, dict):
+            ranges = tuple((int(first, 16), count) for first, count in d["write_once"])
+            outflow = None if d["max_outflow"] is None else int(d["max_outflow"])
+            out.append((d["code"], ranges, outflow))
+        else:
+            out.append(tuple(d))
+    return tuple(out)
 
 
 EIP_8141 = FramePoolConfig()
@@ -138,6 +165,8 @@ EIP_8266 = FramePoolConfig(name="eip-8266", expiring=True)
 # CG-1: the bound template is exp-frames experiment 48's (10-claim-gated-admission.md version 7)
 CLAIM_GATED = EIP_8288.with_(name="claim-gated", claims=True, bond=True, binding=True, bound_template_length=1185,
                              bound_template_keccak="0x52c656815e560bb189c3fb362c9628432ca1ed6b720e239857775236c18bc1d3")
+# RM-1: claim-gated's parameters, the canonical FP-11 and FP-12 kept, and the relaxations behind RM-2's gate
+RELAXED = CLAIM_GATED.with_(name="relaxed", relaxed=True)
 
 PROFILES = {c.name: c for c in (EIP_8141, HEGOTA_TESTNET, MATCHA, EIP_8288, EIP_8288_MASTER, EIP_8272, EIP_8266,
-                                 CLAIM_GATED)}
+                                 CLAIM_GATED, RELAXED)}

@@ -97,6 +97,7 @@ def identifier(value) -> str:
 # --- DS-4: the modules ----------------------------------------------------------------------------------
 
 INT, INT_OR_NULL, BOOL, STR, STR_OR_NULL, STRS, AMOUNT = "int", "int|null", "bool", "str", "str|null", "str[]", "amount"
+DECLS = "declarations"  # RM-1
 
 
 @dataclass(frozen=True)
@@ -161,6 +162,16 @@ CLAIMS = {
                 refresh_seconds=INT, throttled_entity_mempool_count=INT),
     "CG-12": _m("rule", ["ErrClaimUnbound"]),
 }
+RELAXED = {
+    "RM-2": _m(),
+    "RM-3": _m("rule", ["ErrWriteOnceBusy"], declarations=DECLS),
+    "RM-4": _m("rule", sender_bound=BOOL),
+    "RM-5": _m("rule", outflow_bound=BOOL),
+    "RM-6": _m("rule", ["ErrDeclarationThrottled", "ErrDeclarationBanned"], ban_violations=INT, throttled_count=INT,
+               declaration_refresh_seconds=INT),
+    "RM-7": _m(),
+    "RM-8": _m("rule", ["ErrRelayUnchecked"]),
+}
 _ERC_CODES = {
     "PREFIX-010": ["ErrFrameExpiryNotFirst", "ErrFrameNoPayer", "ErrFrameUnrecognizedPrefix"],
     "PREFIX-020": ["ErrFrameDeployNoCode"], "PREFIX-040": ["ErrFrameAtomicInPrefix"],
@@ -204,7 +215,7 @@ ERC_ORDER = (
     "PROPAGATION-030", "PROPAGATION-040", "PROPAGATION-050",
 )
 ERC = {name: Module(_ERC_PARAMS.get(name, {}), "rule", tuple(_ERC_CODES.get(name, ()))) for name in ERC_ORDER}
-MODULES: dict[str, Module] = {**FRAME_POOL, **AGGREGATION, **CLAIMS, **ERC}
+MODULES: dict[str, Module] = {**FRAME_POOL, **AGGREGATION, **CLAIMS, **RELAXED, **ERC}
 REPLACED = ("FP-5", "FP-6", "FP-7", "FP-9", "FP-11", "FP-12")  # DS-6 step 3, AM-2
 
 
@@ -225,7 +236,26 @@ def _type_ok(t, v) -> bool:
         return isinstance(v, list) and all(isinstance(x, str) for x in v)
     if t == AMOUNT:
         return isinstance(v, str) and v.isdigit() and (v == "0" or v[0] != "0")
+    if t == DECLS:
+        return isinstance(v, list) and all(_declaration_ok(d) for d in v) and \
+            len({d["code"] for d in v}) == len(v)
     raise ValueError(t)
+
+
+_HEX = set("0123456789abcdefABCDEF")
+
+
+def _declaration_ok(d) -> bool:
+    """RM-1: a declaration's three members, each of its type."""
+    if not isinstance(d, dict) or set(d) != {"code", "write_once", "max_outflow"} or not isinstance(d["code"], str):
+        return False
+    if not isinstance(d["write_once"], list):
+        return False
+    for r in d["write_once"]:
+        if not (isinstance(r, list) and len(r) == 2 and isinstance(r[0], str) and r[0][:2] == "0x"
+                and 1 <= len(r[0]) - 2 <= 64 and set(r[0][2:]) <= _HEX and type(r[1]) is int and 1 <= r[1] <= 2**32):
+            return False
+    return d["max_outflow"] is None or _type_ok(AMOUNT, d["max_outflow"])
 
 
 def check_modules(rules: dict) -> None:
@@ -279,11 +309,18 @@ def _complete(effective: dict) -> None:
         for name in {**AGGREGATION, **CLAIMS}:
             if name in effective:
                 raise DescriptorError("ErrDescriptorConflict", name)
-    for family, needs in (("AG", AGGREGATION), ("CG", {**AGGREGATION, **CLAIMS})):
+    for family, needs in (("AG", AGGREGATION), ("CG", {**AGGREGATION, **CLAIMS}),
+                          ("RM", {**AGGREGATION, **CLAIMS, **RELAXED})):
         if any(name.startswith(family + "-") for name in effective):
             for name in needs:
                 if name not in effective:
                     raise DescriptorError("ErrDescriptorIncomplete", name)
+    if any(name in RELAXED for name in effective):  # DS-6 step 6: the canonical values RM-2 judges by
+        fp11 = effective["FP-11"][0]
+        if fp11["max_pending_noncanonical"] != 1 or fp11["cap_codeless_payers"]:
+            raise DescriptorError("ErrDescriptorConflict", "FP-11")
+        if effective["FP-12"][0]["per_sender"] != "one":
+            raise DescriptorError("ErrDescriptorConflict", "FP-12")
 
 
 class Store:
@@ -345,6 +382,8 @@ def compile_config(d: Descriptor) -> FramePoolConfig:
     if any(name in eff for name in ERC):
         name = "erc-8421"
         changes["ruleset"] = "erc-8421"
+    elif "RM-2" in eff:
+        name = "relaxed"
     elif "CG-2" in eff:
         name = "claim-gated"
     elif "AG-2" in eff:
@@ -355,4 +394,5 @@ def compile_config(d: Descriptor) -> FramePoolConfig:
     changes["claims"] = "CG-2" in eff
     changes["bond"] = "CG-11" in eff
     changes["binding"] = "CG-12" in eff
+    changes["relaxed"] = "RM-2" in eff
     return EIP_8141.with_(name=name, **changes)

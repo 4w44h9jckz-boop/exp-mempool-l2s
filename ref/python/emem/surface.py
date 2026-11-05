@@ -18,8 +18,10 @@ from .errors import TxError
 from .framepool.config import FramePoolConfig
 from .keccak import keccak256
 from .model import Head, State
+from .aggregation import Aggregator, Prover, Wrapper
 from .claimticket import TicketClaim, TicketFrame, TxSignature, bound, carried
-from .tx import Claim, Frame, FrameTx, Signature
+from .dependencies import dependencies
+from .tx import LEANSPHINCS, Claim, Dependency, Frame, FrameTx, Signature
 from .txpool import TxPool
 
 FRAME_TX_TYPE = 0x06
@@ -46,6 +48,7 @@ class SurfaceConfig:
 SURFACE_PROFILES = {
     "eip-8141": SurfaceConfig(),
     "hegota-testnet": SurfaceConfig(chain_id=8141),
+    "eip-8288-master": SurfaceConfig(),  # version 5: AG-1's pool profile of that name
 }
 
 
@@ -244,9 +247,11 @@ def decode(raw: bytes, frame_cfg: FramePoolConfig, cfg: SurfaceConfig,
         target = _hex(f["target"]) if f["target"] else None
         deadline = int.from_bytes(f["data"], "big") if target == expiry and len(f["data"]) == 8 else None
         roots = _roots(f["data"]) if target is not None and target == root_verifier else ()
+        deps = _deps(f["data"], raw, frame_cfg, cfg.envelope) \
+            if frame_cfg.dependency_frames and f["mode"] == frame_cfg.dep_frame_mode else ()
         frames.append(Frame(mode=f["mode"], flags=f["flags"], target=target, exec_gas=f["exec"],
                             state_gas=f["state"], value=f["value"], data_size=len(f["data"]), deadline=deadline,
-                            roots=roots))
+                            roots=roots, deps=deps))
         data.append(f["data"])
     signatures = []
     for s in t["signatures"]:
@@ -297,6 +302,18 @@ def _claim(t: dict, keys: list[int], frame_cfg: FramePoolConfig, codes: dict[str
                  bound=is_bound)
 
 
+def _deps(data: bytes, raw: bytes, frame_cfg: FramePoolConfig, envelope: str) -> tuple[Dependency, ...]:
+    """SF-3, version 5: a dependency frame's triples, one for each whole 96 bytes; under `sig_hash`, a zero
+    data_hash is written as the transaction's signature hash."""
+    out = []
+    for i in range(0, len(data) - len(data) % 96, 96):
+        scheme, data_hash, key = data[i:i + 32], data[i + 32:i + 64], data[i + 64:i + 96]
+        if frame_cfg.zero_data_hash == "sig_hash" and data_hash == bytes(32):
+            data_hash = sig_hash(raw, envelope)
+        out.append(Dependency(int.from_bytes(scheme, "big"), _hex(data_hash), _hex(key)))
+    return tuple(out)
+
+
 def _roots(data: bytes) -> tuple[tuple[str, int, str], ...]:
     """SF-3: a recent-root verifier frame's tuples, `source_id(32) || uint64_be(slot) || root(32)` (RR-1)."""
     if len(data) % 72:
@@ -345,6 +362,7 @@ class Surface:
         self.known: dict[str, set[str]] = {}  # SF-6: by hash, the peers known to have it
         self.by_hash: dict[str, FrameTx] = {}  # chain hash to model transaction, for what the pool may hold
         self.handed: list[str] = []  # SF-9: the hashes handed to the client, in order
+        self.aggregator = Aggregator(pool)  # SF-10: AG-5 and AG-6 for a client's wrapper
 
     def _admit(self, raw: bytes, answer: dict | None, now: float) -> tuple[str, str | None, bool]:
         """SF-2, FP-2 to FP-7, SF-4 and `add`: the result, the hash if the bytes decode, whether the client was asked."""
@@ -368,7 +386,10 @@ class Surface:
         return result, h, True
 
     def _relay(self, h: str, source: str | None) -> list[str]:
-        """SF-6: every peer not known to have it, never the one it came from."""
+        """SF-6: every peer not known to have it, never the one it came from; none for a transaction with
+        dependencies, which a peer could not admit without their proofs."""
+        if dependencies(self.by_hash[h], self.pool.frame.config):
+            return []
         known = self.known.setdefault(h, set())
         if source is not None:
             known.add(source)
@@ -396,10 +417,60 @@ class Surface:
         if h is not None:
             self.known.setdefault(h, set()).add(source)
         at_fault = result in (E.ErrTxTypeNotSupported, E.ErrFrameDecode)
-        gossip = "accept" if result == E.OK else "reject" if at_fault else "ignore"
+        forward = result == E.OK and not dependencies(self.by_hash[h], self.pool.frame.config)  # SF-6
+        gossip = "accept" if forward else "reject" if at_fault else "ignore"
         return {"result": result, "gossip": gossip, "disconnect": at_fault, "asked_client": asked,
                 "relay_to": self._relay(h, source) if result == E.OK else [],
                 "handed": result == E.OK and self.cfg.handoff}
+
+    def send_wrapper(self, param, answers: list | None = None, now: float = 0) -> dict:
+        """SF-10: `frames_sendWrapper`, a client's mode 0 wrapper; `answers` are the client's, one for each
+        transaction, for those it is asked about."""
+        fail = {"error_code": INVALID_PARAMS, "asked_client": [], "relay_to": []}
+        hexes = lambda xs: isinstance(xs, list) and all(  # noqa: E731
+            isinstance(x, str) and re.fullmatch(r"0x(?:[0-9a-fA-F]{2})*", x) for x in xs)
+        triple = lambda d: isinstance(d, list) and len(d) == 3 and type(d[0]) is int and d[0] >= 0 and all(  # noqa: E731
+            isinstance(x, str) and re.fullmatch(r"0x[0-9a-fA-F]{64}", x) for x in d[1:])
+        if not isinstance(param, dict) or set(param) != {"transactions", "mode", "deps", "proofs"} \
+                or param["mode"] != 0 or type(param["mode"]) is not int or not hexes(param["transactions"]) \
+                or not hexes(param["proofs"]) or not isinstance(param["deps"], list) \
+                or not all(triple(d) for d in param["deps"]) or len(param["proofs"]) != len(param["deps"]):
+            return fail
+        cfg = self.pool.frame.config
+        txs = []
+        for raw in param["transactions"]:  # item 1
+            try:
+                txs.append(decode(bytes.fromhex(raw[2:]), cfg, self.cfg, self.codes))
+            except TxError as err:
+                return {"result": err.code, "error_code": SERVER_ERROR, "asked_client": [], "relay_to": []}
+        asked = []
+        for i, tx in enumerate(txs):  # item 2
+            try:
+                self.pool.frame.before_prefix(tx)
+            except TxError:
+                asked.append(False)
+                continue
+            answer = answers[i] if answers is not None and i < len(answers) else None
+            if answer is None:
+                raise ValueError(f"the client would be asked about {tx.label} and no answer was given")
+            txs[i] = replace(tx, verdict=verdict(answer))
+            asked.append(True)
+        deps = tuple(Dependency(d[0], d[1].lower(), d[2].lower()) for d in param["deps"])
+        prover = Prover(cfg.prover) if cfg.prover is not None else None
+        proofs = tuple(prover is not None and d.scheme == LEANSPHINCS and prover.verify_sphincs(d, p)
+                       for d, p in zip(deps, param["proofs"]))  # item 3
+        witnesses = tuple(p if d.scheme == LEANSPHINCS else "" for d, p in zip(deps, param["proofs"]))
+        out = self.aggregator.receive(Wrapper(tuple(txs), 0, deps, proofs, witnesses=witnesses), now)  # item 4
+        if isinstance(out, str):
+            return {"result": out, "error_code": SERVER_ERROR, "asked_client": asked, "relay_to": []}
+        results = []
+        for tx, r in zip(txs, out):
+            if r == E.OK:
+                self.by_hash[tx.label] = tx
+                if self.cfg.handoff:
+                    self.handed.append(tx.label)
+            results.append(tx.label if r == E.OK else r)
+        return {"result": results, "asked_client": asked, "relay_to": []}
 
     def pending(self) -> list[str]:
         """The chain's hashes of what the pool holds, in the order admitted."""

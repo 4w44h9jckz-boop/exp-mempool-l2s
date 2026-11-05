@@ -76,3 +76,7 @@ and says so.
 | [0069](0069-the-bound-template-is-experiment-48s-and-gives-a-nodes-verdict-on-every-signature-entry.md) | The bound template is experiment 48's, and gives a node's verdict on every signature entry |
 | [0070](0070-the-key-round-is-specified-from-the-eips-text-with-real-keys-and-decryption-as-a-field.md) | The key round is specified from the EIP's text, with real keys and decryption as a field |
 | [0080](0080-the-holder-of-a-bound-ticket-may-re-price-its-transaction.md) | The holder of a bound ticket may re-price its transaction |
+| [0081](0081-a-relaxed-alternative-mempool-behind-the-canonical-rules-with-declarations-reputation-and-three-tiers.md) | A relaxed alternative mempool behind the canonical rules, with declarations, reputation and three tiers |
+| [0082](0082-many-pending-per-sender-and-the-payers-count-lifted-are-bounded-by-a-declared-contract-and-a-reserve.md) | Many pending per sender and the payer's count lifted are bounded by a declared contract and a reserve |
+| [0083](0083-a-node-names-a-real-prover-and-folds-only-the-signatures-it-holds.md) | A node names a real prover, and folds only the signatures it holds |
+| [0084](0084-a-node-takes-a-clients-mode-0-wrapper-over-json-rpc-under-eip-8288-master.md) | A node takes a client's mode 0 wrapper over JSON-RPC, under EIP-8288 as master writes it |

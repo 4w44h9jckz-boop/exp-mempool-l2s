@@ -43,11 +43,13 @@ class TxPool:
                     results[i] = r
         return results
 
-    def reset(self, head: Head, state: State, now: float = 0, verdicts: dict[str, str] | None = None) -> None:
-        """MD-8; `verdicts` maps a pending frame transaction's hash to its client's verdict at `head`."""
+    def reset(self, head: Head, state: State, now: float = 0, verdicts: dict[str, str] | None = None,
+              access_lists: list | None = None) -> None:
+        """MD-8; `verdicts` maps a pending frame transaction's hash to its client's verdict at `head`, and
+        `access_lists` are the blocks' EIP-7928 access lists, oldest first."""
         self.head, self.state = head, state
         self.nonce.reset(head, state, now)
-        self.frame.reset(head, state, now, verdicts)
+        self.frame.reset(head, state, now, verdicts, access_lists)
         self.sealed.reset(head, state, now)
 
     def tick(self, now: float) -> None:

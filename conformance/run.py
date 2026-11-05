@@ -122,9 +122,11 @@ def make_wrapper(d: dict, cfg=None) -> Wrapper:
     stark = None
     if d["mode"] != 0:
         s = d.get("stark", {})
-        stark = Stark(make_deps(s["covers"]) if "covers" in s else deps, s.get("valid", True))
+        stark = Stark(make_deps(s["covers"]) if "covers" in s else deps, s.get("valid", True),
+                      bytes.fromhex(s["proof"].removeprefix("0x")) if "proof" in s else None)  # AG-11
     signed = tuple(d.get("signed", ()))
-    return Wrapper(tuple(entries), d["mode"], deps, proofs if d["mode"] == 0 else (), stark, signed)
+    witnesses = tuple(d.get("witnesses", ()))  # AG-11
+    return Wrapper(tuple(entries), d["mode"], deps, proofs if d["mode"] == 0 else (), stark, signed, witnesses)
 
 
 def make_tx(d: dict):
@@ -254,6 +256,8 @@ def run_pool(case: dict) -> None:
     profile = compile_config(loaded) if loaded else PROFILES[case.get("profile", EIP_8141.name)]
     nonce_cfg = GETH.with_(**config.get("nonce", {}))
     frame_cfg = profile.with_(**config.get("frame", {}))
+    if frame_cfg.prover == "stub":  # AG-11: the stub of the prover's contract (decision record 0083)
+        frame_cfg = frame_cfg.with_(prover=str(Path(__file__).resolve().parent / "prover-stub.py"))
     sealed_cfg = SEALED_PROFILES[case.get("sealed", "off")].with_(**config.get("sealed", {}))
     focil_cfg = FOCIL_PROFILES[case.get("focil", "off")].with_(**config.get("focil", {}))
     head_d = dict(DEFAULT_HEAD)
@@ -307,6 +311,13 @@ def run_pool(case: dict) -> None:
                                f"got {aggregator.proving_time}")
             if "expect_memory" in step and aggregator.memory != step["expect_memory"]:
                 raise Mismatch(f"{where}: aggregate memory expected {step['expect_memory']}, got {aggregator.memory}")
+            if "expect_proof" in step:  # AG-11
+                got = "0x" + w.stark.proof.hex() if w.stark.proof is not None else None
+                if got != step["expect_proof"]:
+                    raise Mismatch(f"{where}: aggregate proof expected {step['expect_proof']}, got {got}")
+            if "expect_measured" in step and list(aggregator.measured or ()) != step["expect_measured"]:
+                raise Mismatch(f"{where}: aggregate measured expected {step['expect_measured']}, "
+                               f"got {aggregator.measured}")
         elif "reset" in step:
             now = step.get("now", now)
             head_d.update(step["reset"].get("head", {}))
@@ -315,7 +326,11 @@ def run_pool(case: dict) -> None:
             write_roots(state, frame_cfg, step["reset"].get("roots"))
             by_label = {label(tx): tx.hash for txs in pool.frame.content().values() for tx in txs}
             verdicts = {by_label[k]: v for k, v in step["reset"].get("verdicts", {}).items()}  # MD-8
-            pool.reset(head, state, now, verdicts)
+            lists = [{addr: {"storage_changes": {int(slot): [tuple(w) for w in writes]
+                                                 for slot, writes in a.get("storage_changes", {}).items()},
+                             "balance_changes": [tuple(b) for b in a.get("balance_changes", [])]}
+                      for addr, a in block.items()} for block in step["reset"].get("access_lists", [])]  # MD-8
+            pool.reset(head, state, now, verdicts, lists)
         elif "tick" in step:
             now = step["tick"]
             pool.tick(now)
@@ -326,6 +341,14 @@ def run_pool(case: dict) -> None:
         elif "finalize" in step:
             now = step.get("now", now)
             pool.finalize([(b["number"], dict(b.get("gas", {}))) for b in step["finalize"]], now)
+        elif "expect_declarations" in step:  # RM-6
+            got = {code: pool.frame.declaration_status(code) for code in step["expect_declarations"]}
+            if got != step["expect_declarations"]:
+                raise Mismatch(f"{where}: declarations expected {step['expect_declarations']}, got {got}")
+        elif "expect_groups" in step:  # RM-7
+            got = [[label(tx) for tx in group] for group in pool.frame.groups()]
+            if got != step["expect_groups"]:
+                raise Mismatch(f"{where}: groups expected {step['expect_groups']}, got {got}")
         elif "expect_width" in step:
             got = {s: pool.frame.width(s) for s in step["expect_width"]}
             if got != step["expect_width"]:
@@ -450,7 +473,8 @@ def _model_json(tx: FrameTx) -> dict:
             "max_fee": tx.max_fee, "size": tx.size, "zero_bytes": tx.zero_bytes,
             "frames": [{"mode": f.mode, "flags": f.flags, "target": f.target, "exec_gas": f.exec_gas,
                         "state_gas": f.state_gas, "value": f.value, "data_size": f.data_size,
-                        "deadline": f.deadline, "roots": [list(r) for r in f.roots]} for f in tx.frames],
+                        "deadline": f.deadline, "roots": [list(r) for r in f.roots],
+                        "deps": [[d.scheme, d.data_hash, d.vk_hash] for d in f.deps]} for f in tx.frames],
             "signatures": [{"scheme": s.scheme, "signer": s.signer, "canonical_msg": s.canonical_msg,
                             "valid": s.valid, "length": s.length} for s in tx.signatures],
             "claim": None if tx.claim is None else {"epoch": tx.claim.epoch, "salt": tx.claim.salt,
@@ -463,6 +487,8 @@ def run_surface(case: dict) -> None:
     name = case.get("profile", EIP_8141.name)
     config = case.get("config", {})
     frame_cfg = address_form(PROFILES[name].with_(**config.get("frame", {})))
+    if frame_cfg.prover == "stub":  # AG-11: the stub of the prover's contract (decision record 0083)
+        frame_cfg = frame_cfg.with_(prover=str(Path(__file__).resolve().parent / "prover-stub.py"))
     surface_cfg = SURFACE_PROFILES[name].with_(**config.get("surface", {}))
     head_d = dict(DEFAULT_HEAD)
     head_d.update(case.get("head", {}))
@@ -501,6 +527,12 @@ def run_surface(case: dict) -> None:
             if "as" in step:
                 alias[step["as"]] = got["hash"] if "hash" in got else decode(
                     bytes.fromhex((step.get("rpc") or step["peer"])[2:]), frame_cfg, surface_cfg).label
+            _compare(step["expect"], got, where)
+        elif "wrapper" in step:  # SF-10
+            try:
+                got = node.send_wrapper(step["wrapper"], step.get("client"), now)
+            except ValueError as err:
+                raise Mismatch(f"{where}: {err}") from None
             _compare(step["expect"], got, where)
         elif "head" in step:
             head_d.update(step["head"])

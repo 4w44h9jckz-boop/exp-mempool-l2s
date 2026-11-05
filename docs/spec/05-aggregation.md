@@ -1,11 +1,13 @@
 # 05. In-mempool aggregation (EIP-8288)
 
-Version 4, 2026-10-20. Version 1, 2026-10-08, had no proving time; version 2
+Version 5, 2026-11-04. Version 1, 2026-10-08, had no proving time; version 2
 added AG-9 and its five parameters, and version 3 AG-10 and its five.
 Version 4 adds the profile `eip-8288-master`, the EIP as it stands on master
 at `899bef0a`, with leanSTARK reserved, through five parameters of AG-1 that
 AG-2, AG-4 and AG-5 read; under `eip-8288` nothing changes (decision record
-0063).
+0063). Version 5 adds AG-11, a node's real prover in place of the model's
+flags, as a node setting that every profile leaves unset (decision record
+0083).
 
 The mempool section of EIP-8288, *In-mempool signature and proof
 aggregation*, written down as clauses on top of the frame pool. The EIP is
@@ -26,9 +28,9 @@ recursive STARK every `AGGREGATION_INTERVAL`, and a block carries one
 recursive STARK for all its dependencies. What it is for, and why a privacy
 protocol's spend needs it, is not restated here.
 
-The model does not prove anything. A proof is a flag that says whether it
-verifies, and a recursive STARK is the list of dependencies whose hash is its
-public input, with the same flag. A node that holds proofs for a set of
+The model does not prove anything unless a node names a prover (AG-11). A
+proof is a flag that says whether it verifies, and a recursive STARK is the
+list of dependencies whose hash is its public input, with the same flag. A node that holds proofs for a set of
 dependencies can produce a recursive STARK for any subset of it, because the
 EIP's circuit takes recursive proofs and direct witnesses as inputs and
 removes `discards` (Block Validity, Recursive STARK Proof Structure).
@@ -76,6 +78,7 @@ version 4, under the `eip-8141` profile, with these changes and no others:
 | `memory_recursive` | 0 | MiB for each recursive STARK an aggregate takes as an input (AG-10) |
 | `memory_sig` | 0 | MiB for each leanSPHINCS triple an aggregate verifies directly (AG-10) |
 | `memory_stark` | 0 | MiB for each leanSTARK triple an aggregate verifies directly (AG-10) |
+| `prover` | none | the command of a real prover with AG-11's contract; a setting of each node, not of the profile; none keeps the model's flags |
 
 Every FP-1 parameter is `eip-8141`'s. The schemes are `LEANSPHINCS_SCHEME`,
 `0x10`, at `LEANSPHINCS_VERIFICATION_GAS` 3000, and `LEANSTARK_SCHEME`,
@@ -332,13 +335,81 @@ aggregate, since what must fit is the peak of the one aggregate being
 proven, not a sum over aggregates; and it leaves the cover to AG-9, so that
 memory never changes which input covers a triple, decision record 0042.
 
+## A real prover
+
+**AG-11. A node's prover.** A node whose `prover` is set builds and checks
+recursive STARKs with it, as a command run with one of two forms, each
+printing one JSON line:
+
+- `aggregate <claims> <out>`: `claims` is a file holding a JSON list of
+  objects with `publicKey`, `message` and `signature`, each hexadecimal; the
+  prover writes the recursive STARK's bytes to `out` and prints an object
+  with `proofBytes`, `aggregateMs` and `peakRssBytes`;
+- `verify-aggregate <proof> <claims>`: `proof` is a file of a recursive
+  STARK's bytes and `claims` a file holding a JSON list of objects with
+  `publicKey` and `message`; the prover prints `{"verified": true}`.
+
+A refusal is a line `{"error": ...}` and exit status 2. The prover reads hex
+with or without `0x`, and a node passes each witness on as it received it.
+Under `prover`:
+
+1. a leanSPHINCS triple's `vk_hash` is its 32-byte public key and its
+   `data_hash` its 32-byte message, each written as `0x` and 64
+   hexadecimal digits;
+2. a mode 0 wrapper carries, beside each leanSPHINCS triple's proof, the
+   signature itself, its **witness**. AG-5's step 5 checks a mode 0 proof
+   as before, and the node keeps the witness of each leanSPHINCS triple
+   whose proof verifies;
+3. a mode 1 wrapper's recursive STARK carries its bytes. In AG-5's step 5 it
+   verifies when `verify-aggregate`, given its bytes and the wrapper's
+   `deps` as claims, prints `{"verified": true}` and exits 0. Any other
+   answer is `ErrWrapperProof`, and so is a wrapper whose `deps` hold a
+   leanSTARK triple, a triple that is not of item 1's form, or no bytes;
+4. AG-7 lists a transaction only if each of its dependencies is a
+   leanSPHINCS triple whose witness the node keeps. Every triple is verified
+   directly, AG-9's rule 3, and the aggregate takes no recursive STARK as an
+   input. The node then runs `aggregate` over the listed triples, in `deps`
+   order, each with its witness, and the aggregate's recursive STARK is the
+   bytes it writes. If the prover refuses, the node sends no aggregate that
+   interval;
+5. AG-9 and AG-10 still bound what AG-7 lists, by the profile's costs. The
+   prover's `aggregateMs` and `peakRssBytes` are the aggregate's measured
+   proving time and memory, which the node records and does not decide by.
+
+**Source:** `exp-e2e-frames` experiment 19's prover at `47f5496`
+(`exp-e2e-frames/experiments/19-x14-hash-based-stealth-addresses-under-8288/prover/src/main.rs`,
+its usage lines and its `aggregate` and `verify-aggregate` modes), over
+leanVM at `3cbac04`, whose aggregation guest checks "sub-proofs OF THIS SAME
+BYTECODE". *Interpretation*, decision record 0083:
+
+- **Only leanSPHINCS triples are folded.** leanVM at `3cbac04` recurses
+  over proofs of its own bytecode only, so no aggregate it makes covers a
+  leanSTARK dependency, whose proof is another program's; a transaction
+  with one is admitted under AG-6 and left out of the node's aggregates.
+- **No recursive input.** The prover's `aggregate` passes no children to
+  leanVM's aggregation, so a node folds only signatures it holds. A
+  transaction it holds by a received aggregate alone is not in its own.
+- **A mode 0 signature is checked by the prover, alone.** A client's mode 0
+  wrapper reaches a node over `frames_sendWrapper`, and each leanSPHINCS
+  proof's verdict in AG-5's step 5 is the prover's `verify-sphincs`
+  (`11-surface.md`, SF-10; decision record 0084), a mode the prover has
+  since `exp-e2e-frames` `3209255`. Its `aggregate` also refuses a
+  signature that does not open at its message, so a witness the node took
+  wrongly would cost it that interval's aggregate.
+- **One process per call is too slow to fold every interval.** Started
+  afresh for each fold, the prover took 2.7 to 3.4 s for an aggregate of
+  two or three signatures, at about 413 to 417 MB at peak
+  (`exp-e2e-frames` experiment 22, `992094b`), over AG-7's 1,000 ms. A node
+  that folds every interval needs its prover resident, which this contract,
+  one process for each call, does not give.
+
 ## Not modelled
 
 - Block validity rules 1 and 2, the header field and the recursive STARK's
   public input: a block in the model is valid if its transactions are.
 - The size of a recursive STARK, and the sizes of leanSPHINCS signatures and
-  leanSTARK proofs; the simulator counts bytes of transactions and numbers
-  of proofs, not bytes of proofs. Proving time is AG-9's count and memory
+  leanSTARK proofs, unless a node names a prover (AG-11); the simulator
+  counts bytes of transactions and numbers of proofs, not bytes of proofs. Proving time is AG-9's count and memory
   AG-10's, and nothing else in a node waits for the one or holds the other.
 - The FOCIL extension, its `recursive_stark` field and what attesters check.
 - A node's choice to rebroadcast a mode 0 wrapper of concatenated leanSPHINCS

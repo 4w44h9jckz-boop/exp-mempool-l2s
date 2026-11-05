@@ -62,6 +62,21 @@ says is checked against the primary source before it is relied on.
   and `SIGPARAM` (which halts on an `ARBITRARY` entry's resolved signer).
   Used for decision record 0069 and
   `conformance/vectors/claim-gated/cg-12-binder-entries.json`.
+- **EIP-7928, Block-Level Access Lists**, Last Call, ethereum/EIPs at
+  `258836f9`, read 2026-11-04: "RLP Data Structures" (`storage_changes`, slot
+  to block access index to new value; `balance_changes`, block access index
+  to post-balance), "BlockAccessIndex Assignment" and "Recording Semantics
+  by Change Type" (a write is "any value change" and "zeroing a slot"; each
+  write is compared against the value immediately before its index). Used
+  for MD-8's `access_lists` (`00-model.md` version 13) and RM-6 of
+  `docs/spec/15-relaxed-mempool.md`.
+- **ERC-7562, Account Abstraction Validation Scope Rules**, Review,
+  ethereum/ERCs at `493ba8a` (the head of pull request 2028), read
+  2026-11-04: "Alternative Mempools" (ALT-010 to ALT-040: alternative rules
+  "MUST be checked only when a canonical rule is violated", and `opsSeen`
+  and `opsIncluded` kept per alternative mempool) and "Alt-mempool
+  Reputation" (AREP-010, AREP-020). Used for RM-2 and RM-6 of
+  `docs/spec/15-relaxed-mempool.md` and decision record 0081.
 - **EIP-8250, Keyed Nonces for Frame Transactions**, Draft, same commit, read
   2026-10-07. Sections: Mempool, Rationale. Used for FP-7 and FP-12. Read
   again the same day for experiment 02: Constants
@@ -575,6 +590,15 @@ says is checked against the primary source before it is relied on.
   the violation, "validation prefix frame reverted", "validation prefix did
   not establish a payer") and `crates/blockchain/blockchain.rs`
   (`prospective_header`). Used for SF-4 and SF-8.
+  Read again at the same commit on 2026-11-04, when `web3_clientVersion`
+  still named it (`ethrex/v23.0.0-hegota-testnet-hotfix-64b8fc09...`):
+  `crates/networking/rpc/ethrex.rs` (`SimulateFrameTransactionResult`:
+  `valid`, `prefixShape`, `payer`, `maxCost`, `violation`, `gasUsed`,
+  `frames`, `executionStatus`, `executionError`, and no reads) and
+  `crates/vm/levm/src/vm.rs` (a storage read outside the sender records
+  `FrameSimViolation::StorageReadNonSender`). Used for decision record 0081,
+  which finds that a node run against this client cannot learn a prefix's
+  reads.
   Read again the same day for item 46: `crates/blockchain/focil_eligibility.rs`
   (`MAX_VERIFY_GAS_PER_IL`, `MAX_VERIFY_GAS_PER_TX`, `fill_il_budget`,
   `is_profile_2_candidate`), `crates/blockchain/inclusion_list_validator.rs`
@@ -741,6 +765,42 @@ says is checked against the primary source before it is relied on.
   format (fixed)". Used for
   `conformance/vectors/frame-pool/fp-11-committee.json` and decision record
   0066.
+- **exp-e2e-frames** (4w44h9jckz-boop/exp-e2e-frames, branch
+  `claude/zealous-turing-aputwd` at `47f5496`, read 2026-11-04):
+  `exp-e2e-frames/experiments/19-x14-hash-based-stealth-addresses-under-8288/prover/src/main.rs`,
+  the prover's usage lines and its `aggregate` and `verify-aggregate` modes
+  over leanVM at `3cbac04`, the claims each reads, what each prints, and a
+  refusal as `{"error": ...}` with exit status 2; the same experiment's
+  README, Amendment 3, for leanVM's recursion over its own bytecode only.
+  Used for `05-aggregation.md` AG-11 and decision record 0083. The prover
+  was read, not built or run here.
+- **exp-e2e-frames** (branch `claude/zealous-turing-aputwd` at `992094b`,
+  read 2026-11-04):
+  `exp-e2e-frames/experiments/22-q1-leansphincs-senders/results/1-wrappers-real-prover.txt`,
+  skandha's two-node exchange run on experiment 19's prover built natively:
+  seven folds of two or three leanSPHINCS signatures, 268,409 to 274,905
+  proof bytes, 2,746.8 to 3,399.2 ms each with the prover started afresh,
+  412,516,352 to 417,406,976 bytes at peak; and that the prover's `sphincs`
+  mode prints bare hex while the stub printed `0x`. Used for AG-11's
+  sentence on a resident prover and on hex.
+- **exp-e2e-frames** (branch `claude/zealous-turing-aputwd` at `3209255`,
+  read 2026-11-05):
+  `exp-e2e-frames/experiments/19-x14-hash-based-stealth-addresses-under-8288/prover/src/main.rs`,
+  `verify_sphincs`: one leanSPHINCS signature checked alone, a key of
+  `PUB_KEY_SIZE` bytes, a 32-byte message and a signature of `SIG_SIZE`
+  bytes, 7,740 at leanVM `3cbac04`, each hex with or without `0x`;
+  `{"verified": ..., "verifyMs": ...}` and exit status 0, a wrong length or a
+  character that is not hex refused with exit status 2. Used for
+  `11-surface.md` SF-10, AG-11's bullet on a mode 0 signature, and decision
+  records 0083 and 0084. Read, not built or run here.
+- **exp-e2e-frames** (branch `claude/zealous-turing-aputwd` at `c39af8e`,
+  `70c8fc3`, `cc5d4c9` and `0114573`, read 2026-11-05): experiment 22's
+  README, Amendments 2 and 4, and `results/5-sweep-trial.json`. The
+  skandha node refused a leanSPHINCS-authorized transaction for its chain id and
+  its mode 4 frame, while the patched client mined it. A transaction whose
+  witness signs another hash passed the client's simulation and pool, and
+  its block's proof was rebuilt 21 times, each refused at import, the head
+  staying at 766. Used for decision record 0084.
 - **exp-frames** (branch `exp/42-noir-transfer` at `32586cc`, read
   2026-10-21): `exp-frames/experiments/42-noir-transfer/README.md`, a private transfer on
   Aztec's note and nullifier model, proved in Noir and checked in a `VERIFY`
